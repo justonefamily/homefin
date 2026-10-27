@@ -11,10 +11,12 @@ import { PeriodToggle } from "@/components/PeriodToggle";
 import { Card, Mark, Row, SectionTitle, cx, fmt, money } from "@/components/ui";
 import { billStatuses, currentPeriod, inPeriod, periodLabel, weeklyProjection } from "@/lib/projections";
 import { debtsFromAccounts, simulatePayoff, strategyMeta } from "@/lib/strategies";
-import { CreditCard, BarChart3, CalendarDays } from "lucide-react";
+import { CreditCard, BarChart3, CalendarDays, Sparkles } from "lucide-react";
+import { detectIncome, detectRecurring } from "@/lib/detect";
 
 export default function HomePage() {
-  const data = useHome((s) => s.data)!;
+  const { data: d, update } = useHome();
+  const data = d!;
   const today = useToday();
   const params = useSearchParams();
   const [tab, setTab] = useState<"today" | "focus">(params.get("view") === "focus" ? "focus" : "today");
@@ -45,6 +47,26 @@ export default function HomePage() {
 
       {tab === "focus" && <FocusBoard today={today} />}
       {tab === "today" && (<>
+      {(() => {
+        const inc = detectIncome(data, today);
+        const top = inc[0];
+        const already = top && data.pay.monthlyIncome === top.monthly && data.pay.payDays.join() === top.payDays.join();
+        const billSg = detectRecurring(data, today).length;
+        if (!top || already) return billSg > 0 ? (
+          <Link href="/bills" className="block"><Card className="p-3.5 flex items-center gap-2.5 border-accent-line bg-accent-bg/40 hover:border-accent"><Sparkles size={16} className="text-accent shrink-0" /><div className="text-[13px]"><b>{billSg} recurring payment{billSg > 1 ? "s" : ""}</b> in your transactions look like bills — review them on Bills.</div><div className="ml-auto text-xs text-accent font-semibold">Review ›</div></Card></Link>
+        ) : null;
+        return (
+          <Card className="p-4 flex flex-col gap-2.5 border-accent-line bg-accent-bg/40">
+            <div className="flex items-center gap-2"><Sparkles size={16} className="text-accent" /><div className="text-sm font-semibold">Looks like this is your paycheck</div></div>
+            <div className="text-[13px]"><b>{top.source}</b> · {money(top.perPaycheck)} {top.cadence === "semimonthly" ? `on the ${top.payDays.join(" and ")}` : top.cadence} · about <b>{money(top.monthly)}/mo</b>{inc.length > 1 ? ` (+${inc.length - 1} other source${inc.length > 2 ? "s" : ""})` : ""}</div>
+            <div className="flex gap-2">
+              <button onClick={() => update((h) => ({ ...h, pay: { ...h.pay, monthlyIncome: inc.reduce((s, x) => s + x.monthly, 0), payDays: top.payDays } }), "set pay schedule from transactions")} className="h-9 px-3 rounded-[10px] bg-accent text-white text-xs font-semibold hover:bg-accent-deep">Use this as my pay schedule</button>
+              <Link href="/settings" className="h-9 px-3 rounded-[10px] border border-chip bg-card text-xs font-semibold flex items-center hover:border-field">Edit manually</Link>
+            </div>
+            {billSg > 0 && <div className="text-[11px] text-muted">Also found {billSg} recurring payment{billSg > 1 ? "s" : ""} that look like bills — <Link href="/bills" className="text-accent font-semibold">review on Bills</Link>.</div>}
+          </Card>
+        );
+      })()}
       {(data.pay.monthlyIncome === 0 || data.bills.length === 0 || data.budgets.length === 0) && (
         <Card className="p-4 flex flex-col gap-3">
           <div className="text-[15px] font-semibold">Set up {data.homeName}</div>

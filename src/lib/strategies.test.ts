@@ -111,3 +111,54 @@ describe("insights", () => {
     expect(compare(home, "income", a, b).totalA).toBe(6400);
   });
 });
+
+describe("recurring-bill detection", () => {
+  it("finds a monthly merchant and ignores one-offs", async () => {
+    const { detectRecurring, autoMarkPaid, suggestionToBill, merchantKey } = await import("./detect");
+    const h = sampleHome(new Date(2026, 9, 27));
+    const tx = [...h.transactions];
+    for (const m of ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]) tx.push({ id: "n" + m, accountId: "chk", date: `${m}-14`, description: "NETFLIX.COM 8005851234", amount: 22.99, category: "subs" });
+    tx.push({ id: "one", accountId: "chk", date: "2026-08-02", description: "Best Buy #1234", amount: 899, category: "wants" });
+    const data = { ...h, transactions: tx, bills: h.bills.filter((b) => b.name !== "Xfinity") };
+    const s = detectRecurring(data, new Date(2026, 9, 27));
+    const nf = s.find((x) => x.key === merchantKey("NETFLIX.COM 8005851234"));
+    expect(nf).toBeTruthy();
+    expect(nf!.cadence).toBe("monthly");
+    expect(nf!.dueDay).toBe(14);
+    expect(nf!.amount).toBeCloseTo(22.99);
+    expect(s.find((x) => x.name.includes("Best Buy"))).toBeUndefined();
+    // Confirm it, then payments are marked retroactively
+    const bill = suggestionToBill(nf!, "bill-nf");
+    const withBill = { ...data, bills: [...data.bills, bill] };
+    const paid = autoMarkPaid(withBill);
+    expect(paid.filter((p) => p.billId === "bill-nf").map((p) => p.month).sort()).toEqual(["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]);
+    // Dismissed keys are not suggested again
+    const dismissed = { ...data, settings: { ...data.settings, dismissedSuggestions: [nf!.key] } };
+    expect(detectRecurring(dismissed, new Date(2026, 9, 27)).find((x) => x.key === nf!.key)).toBeUndefined();
+  });
+});
+
+describe("income detection", () => {
+  it("spots a semi-monthly paycheck", async () => {
+    const { detectIncome } = await import("./detect");
+    const h = sampleHome(new Date(2026, 9, 27));
+    const income = [] as NonNullable<typeof h.income>;
+    for (const m of ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]) { income.push({ id: "a" + m, date: `${m}-01`, amount: 3200, source: "DAYSTAR MINISTRIES PAYROLL" }); income.push({ id: "b" + m, date: `${m}-16`, amount: 3200, source: "DAYSTAR MINISTRIES PAYROLL" }); }
+    income.push({ id: "gift", date: "2026-08-20", amount: 500, source: "Zelle from Mom" });
+    const s = detectIncome({ ...h, income }, new Date(2026, 9, 27));
+    expect(s).toHaveLength(1);
+    expect(s[0].cadence).toBe("semimonthly");
+    expect(s[0].payDays).toEqual([1, 16]);
+    expect(s[0].monthly).toBe(6400);
+  });
+  it("spots biweekly pay", async () => {
+    const { detectIncome } = await import("./detect");
+    const h = sampleHome(new Date(2026, 9, 27));
+    const income = [] as NonNullable<typeof h.income>;
+    let d = new Date(2026, 4, 1);
+    for (let i = 0; i < 12; i++) { income.push({ id: "p" + i, date: d.toISOString().slice(0, 10), amount: 1500, source: "ACME CORP DIRECT DEP" }); d = new Date(d.getTime() + 14 * 86400000); }
+    const s = detectIncome({ ...h, income }, new Date(2026, 9, 27));
+    expect(s[0].cadence).toBe("biweekly");
+    expect(s[0].monthly).toBe(3250);
+  });
+});

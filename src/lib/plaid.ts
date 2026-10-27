@@ -1,5 +1,6 @@
 import { Configuration, PlaidApi, PlaidEnvironments, type AccountBase, type Transaction as PlaidTx } from "plaid";
 import type { Account, AccountKind, HomeData, Transaction } from "./types";
+import { brandColorFor } from "./brands";
 
 /** Plaid errors arrive as axios errors; pull out Plaid's own code and message. */
 export function plaidError(e: unknown): { code: string; message: string } {
@@ -32,7 +33,9 @@ const kindOf = (a: AccountBase): AccountKind => {
 };
 
 /** Merge Plaid accounts into the home: update existing (matched by plaid account id), add new. Appends a balance point per account. */
-export function mergeAccounts(home: HomeData, itemId: string, institution: string, accounts: AccountBase[], now = new Date()): HomeData {
+export interface Branding { color?: string | null; logo?: string | null }
+
+export function mergeAccounts(home: HomeData, itemId: string, institution: string, accounts: AccountBase[], now = new Date(), brand: Branding = {}): HomeData {
   const date = now.toISOString().slice(0, 10);
   const next = home.accounts.slice();
   const history = (home.balanceHistory ?? []).slice();
@@ -44,6 +47,8 @@ export function mergeAccounts(home: HomeData, itemId: string, institution: strin
       ...(existing ?? { id: a.account_id, source: "plaid" as const, name: cleanName(a.official_name) || cleanName(a.name) || "Account", institution: cleanName(institution) || "Bank", kind }),
       balance, mask: a.mask ?? existing?.mask, plaidItemId: itemId, lastSyncedAt: now.toISOString(),
       apr: existing?.apr, minPayment: existing?.minPayment,
+      brandColor: brand.color ?? existing?.brandColor ?? brandColorFor(institution),
+      logo: brand.logo ? `data:image/png;base64,${brand.logo}` : existing?.logo,
     };
     if (existing) next[next.indexOf(existing)] = merged; else next.push(merged);
     history.push({ accountId: a.account_id, date, balance });
@@ -69,6 +74,12 @@ export function mergeTransactions(home: HomeData, added: PlaidTx[], removed: str
     .filter((t) => !existing.has(t.transaction_id) && t.amount > 0 && !t.pending)
     .map((t) => ({ id: t.transaction_id, accountId: t.account_id, date: t.date, description: cleanName(t.merchant_name) || cleanName(t.name) || "Transaction", amount: t.amount, category: catFor(t) }));
   const income = (home.income ?? []).slice();
-  for (const t of added) if (t.amount < 0 && !t.pending && !income.some((i) => i.id === t.transaction_id) && (t.personal_finance_category?.primary === "INCOME")) income.push({ id: t.transaction_id, date: t.date, amount: -t.amount, source: t.merchant_name ?? t.name });
+  const SKIP_DEPOSITS = new Set(["TRANSFER_IN", "LOAN_PAYMENTS", "BANK_FEES"]);
+  for (const t of added) {
+    if (t.amount >= 0 || t.pending || income.some((i) => i.id === t.transaction_id)) continue;
+    const prim = t.personal_finance_category?.primary ?? "";
+    if (SKIP_DEPOSITS.has(prim)) continue;
+    income.push({ id: t.transaction_id, date: t.date, amount: -t.amount, source: cleanName(t.merchant_name) || cleanName(t.name) || "Deposit" });
+  }
   return { home: { ...home, transactions: [...home.transactions.filter((t) => !removedSet.has(t.id)), ...fresh], income }, added: fresh.length };
 }

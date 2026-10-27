@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { mergeAccounts, mergeTransactions, plaid, plaidError } from "@/lib/plaid";
+import { autoMarkPaid } from "@/lib/detect";
 import { adminClient } from "@/lib/supabase/server";
+import { CountryCode } from "plaid";
 import type { HomeData } from "@/lib/types";
 import { requireHome } from "../_shared";
 
@@ -30,7 +32,17 @@ export async function POST() {
     // 1) Accounts + balances
     try {
       const accts = await client.accountsGet({ access_token: it.access_token });
-      home = mergeAccounts(home, it.item_id, it.institution ?? accts.data.item.institution_id ?? "Bank", accts.data.accounts);
+      // Institution branding (color + logo) — optional, cached on the accounts.
+      let brand: { color?: string | null; logo?: string | null } = {};
+      let instName = it.institution ?? "Bank";
+      if (accts.data.item.institution_id) {
+        try {
+          const inst = await client.institutionsGetById({ institution_id: accts.data.item.institution_id, country_codes: [CountryCode.Us], options: { include_optional_metadata: true } });
+          brand = { color: inst.data.institution.primary_color, logo: inst.data.institution.logo };
+          instName = it.institution ?? inst.data.institution.name;
+        } catch (e) { console.warn("plaid institutionsGetById", plaidError(e).code); }
+      }
+      home = mergeAccounts(home, it.item_id, instName, accts.data.accounts, new Date(), brand);
       acctCount += accts.data.accounts.length;
     } catch (e) {
       const pe = plaidError(e);
@@ -65,7 +77,9 @@ export async function POST() {
     }
   }
 
+  const autoPaid = autoMarkPaid(home);
+  if (autoPaid.length) home = { ...home, payments: [...home.payments, ...autoPaid] };
   const { error } = await ctx.sb.from("home_data").update({ data: home, note: "synced accounts" }).eq("home_id", ctx.homeId);
   if (error) return NextResponse.json({ error: `Saved nothing: ${error.message}` }, { status: 500 });
-  return NextResponse.json({ accounts: acctCount, transactions: txCount, pending, problems });
+  return NextResponse.json({ accounts: acctCount, transactions: txCount, autoPaid: autoPaid.length, pending, problems });
 }

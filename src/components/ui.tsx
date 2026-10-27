@@ -79,7 +79,7 @@ export const Row = ({ left, title, sub, right, rightSub, rightTone, onClick }: {
 };
 
 export const Mark = ({ children, className }: { children: ReactNode; className?: string }) => (
-  <div className={cx("w-10 h-10 rounded-[10px] bg-line-soft flex items-center justify-center text-xs font-bold text-ink-3 shrink-0", className)}>{children}</div>
+  <div className={cx("w-10 h-10 rounded-[10px] bg-line-soft flex items-center justify-center text-xs font-bold text-ink-3 shrink-0 overflow-hidden", className)}>{children}</div>
 );
 
 export const Field = ({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) => (

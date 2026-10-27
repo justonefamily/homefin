@@ -11,6 +11,9 @@ import { Button, Card, Eyebrow, Segmented, SectionTitle, Stat, cx, fmt, money } 
 import { billStatuses, currentPeriod, inPeriod, periodLabel, weeklyProjection, yearProjection } from "@/lib/projections";
 import { monthKey } from "@/lib/strategies";
 import type { Bill } from "@/lib/types";
+import { autoMarkPaid, detectRecurring, suggestionToBill, type Suggestion } from "@/lib/detect";
+import { uid } from "@/lib/storage/adapter";
+import { Sparkles } from "lucide-react";
 
 type View = "month" | "weeks" | "year";
 
@@ -33,6 +36,14 @@ export default function BillsPage() {
     update((h) => ({ ...h, payments: paid ? h.payments.filter((p) => !(p.billId === bill.id && p.month === month)) : [...h.payments, { billId: bill.id, month, paidAt: new Date().toISOString(), amount: bill.amount }] }),
       paid ? `unmarked ${bill.name}` : `marked ${bill.name} paid`);
 
+  const suggestions = detectRecurring(data, today);
+  const confirmSuggestion = (sg: Suggestion) => update((h) => {
+    const bill = suggestionToBill(sg, uid());
+    const next = { ...h, bills: [...h.bills, bill] };
+    return { ...next, payments: [...next.payments, ...autoMarkPaid(next)] };
+  }, `added bill ${sg.name} from transactions`);
+  const dismissSuggestion = (sg: Suggestion) => update((h) => ({ ...h, settings: { ...h.settings, dismissedSuggestions: [...(h.settings.dismissedSuggestions ?? []), sg.key] } }), `not a bill: ${sg.name}`);
+
   const saveBill = (b: Bill) => update((h) => ({ ...h, bills: h.bills.some((x) => x.id === b.id) ? h.bills.map((x) => (x.id === b.id ? b : x)) : [...h.bills, b] }), `saved bill ${b.name}`);
   const deleteBill = (id: string) => update((h) => ({ ...h, bills: h.bills.filter((b) => b.id !== id), payments: h.payments.filter((p) => p.billId !== id) }), "deleted bill");
 
@@ -47,6 +58,27 @@ export default function BillsPage() {
         <div className="text-[13px] text-muted">{view === "year" ? today.getFullYear() : today.toLocaleString("en-US", { month: "long", year: "numeric" })}</div>
       </div>
       <div className="md:max-w-sm"><Segmented value={view} onChange={setView} options={[{ id: "month", label: "Month" }, { id: "weeks", label: "Weeks" }, { id: "year", label: "Year" }]} /></div>
+
+      {view === "month" && suggestions.length > 0 && (
+        <Card className="p-4 flex flex-col gap-3 border-accent-line bg-accent-bg/40">
+          <div className="flex items-center gap-2"><Sparkles size={16} className="text-accent" /><div className="text-sm font-semibold">Looks like these are bills</div><div className="text-xs text-muted">· found in your transactions</div></div>
+          <div className="flex flex-col gap-2">
+            {suggestions.slice(0, 8).map((sg) => (
+              <div key={sg.key} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-[12px] bg-card border border-line px-3 py-2.5">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold truncate">{sg.name}</div>
+                  <div className="text-[11px] text-muted">{money(sg.amount)} {sg.cadence === "monthly" ? `around the ${sg.dueDay}${ord(sg.dueDay)}` : sg.cadence} · seen {sg.occurrences}× since {new Date(sg.firstSeen).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · {data.budgets.find((b) => b.id === sg.category)?.name ?? "uncategorized"}</div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => confirmSuggestion(sg)} className="h-9 px-3 rounded-[10px] bg-accent text-white text-xs font-semibold hover:bg-accent-deep">Yes, it&apos;s a bill</button>
+                  <button onClick={() => dismissSuggestion(sg)} className="h-9 px-3 rounded-[10px] border border-chip bg-card text-xs font-semibold hover:border-field">Not a bill</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-[11px] text-muted">Confirming adds the bill and marks every month it was already paid. Edit the amount, due day or category afterwards by tapping the bill.</div>
+        </Card>
+      )}
 
       {view === "month" && (
         <div className="md:grid md:grid-cols-12 md:gap-6 flex flex-col gap-4">
@@ -116,6 +148,8 @@ export default function BillsPage() {
     </>
   );
 }
+
+const ord = (n: number) => (n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th");
 
 const Legend = ({ className, children }: { className: string; children: React.ReactNode }) => (
   <div className="flex items-center gap-1.5"><div className={cx("w-1.5 h-1.5 rounded-full", className)} />{children}</div>

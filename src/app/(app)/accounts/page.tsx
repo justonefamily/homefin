@@ -6,6 +6,7 @@ import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Field, Mark, Modal, cx, inputCls, money, selectCls } from "@/components/ui";
 import type { Account, AccountKind } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
+import { brandColorFor, onBrand } from "@/lib/brands";
 
 const GROUPS: { title: string; kinds: AccountKind[] }[] = [
   { title: "Banks", kinds: ["checking", "savings"] },
@@ -44,6 +45,7 @@ export default function AccountsPage() {
       if (!r.ok) throw new Error(j.error ?? "sync failed");
       await load();
       const parts = [`Synced ${j.accounts} account${j.accounts === 1 ? "" : "s"}, ${j.transactions} new transaction${j.transactions === 1 ? "" : "s"}.`];
+      if (j.autoPaid) parts.push(`Marked ${j.autoPaid} bill payment${j.autoPaid === 1 ? "" : "s"} from your transactions.`);
       if (j.pending?.length) parts.push(`Transactions for ${j.pending.join(", ")} are still loading at Plaid — tap Sync again in a minute.`);
       if (j.problems?.length) parts.push(j.problems.join(" · "));
       setMsg(parts.join(" "));
@@ -139,9 +141,15 @@ function AccountRow({ a, onClick }: { a: Account; onClick: () => void }) {
   if (a.apr !== undefined && a.apr > 0) callouts.push({ label: "APR", value: `${a.apr}%` });
   if (a.minPayment) callouts.push({ label: "Minimum", value: money(a.minPayment) });
   if (a.mask) callouts.push({ label: "Ending", value: `••${a.mask}` });
+  const color = a.brandColor ?? brandColorFor(a.institution) ?? brandColorFor(a.name);
   return (
-    <button onClick={onClick} className="flex items-start gap-3 px-4 py-3 border-b border-line-soft last:border-b-0 w-full text-left hover:bg-surface/60">
-      <Mark>{initials(a.institution)}</Mark>
+    <button onClick={onClick} className="relative flex items-start gap-3 pl-5 pr-4 py-3 border-b border-line-soft last:border-b-0 w-full text-left hover:bg-surface/60">
+      <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r" style={{ background: color ?? "transparent" }} aria-hidden />
+      {a.logo ? (
+        <img src={a.logo} alt="" className="w-10 h-10 rounded-[10px] object-contain bg-card border border-line-soft shrink-0" />
+      ) : (
+        <Mark className={color ? "" : undefined}>{color ? <span className="w-full h-full rounded-[10px] flex items-center justify-center" style={{ background: color, color: onBrand(color) }}>{initials(a.institution)}</span> : initials(a.institution)}</Mark>
+      )}
       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">

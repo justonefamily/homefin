@@ -22,6 +22,9 @@ export interface Account {
   source: "plaid" | "manual" | "email" | "csv";
   plaidItemId?: string;
   lastSyncedAt?: string; // ISO
+  /** Institution brand color (from Plaid, or the built-in palette) and logo (data URL from Plaid). */
+  brandColor?: string;
+  logo?: string;
 }
 
 export interface Bill {
@@ -35,6 +38,8 @@ export interface Bill {
   autopay: boolean;
   /** "monthly" only for now; keep the field so we can add weekly/yearly. */
   cadence: "monthly";
+  /** Normalized merchant key when the bill was detected from (or matched to) bank transactions. */
+  merchant?: string;
 }
 
 export interface BillPayment {
@@ -81,6 +86,8 @@ export interface Settings {
   everydaySpend: number;
   /** How far back to pull transactions when linking a bank (days). Plaid's maximum is 730 (24 months). */
   historyDays?: number;
+  /** Merchant keys the user said are "not a bill". */
+  dismissedSuggestions?: string[];
 }
 
 /** A balance reading for an account on a date — Plaid sync appends one each run. Powers debt/net-worth history. */
