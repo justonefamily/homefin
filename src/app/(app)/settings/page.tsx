@@ -4,6 +4,7 @@ import { Home, RotateCcw } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Field, Modal, Row, cx, inputCls, selectCls } from "@/components/ui";
 import { exportJson, importJson } from "@/lib/storage/local";
+import { InstallCard } from "@/components/PWA";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
 import { STRATEGIES } from "@/lib/strategies";
 import type { HomeMember, Invite, StrategyId } from "@/lib/types";
@@ -83,6 +84,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="flex flex-col gap-4">
+          <InstallCard />
           <Eyebrow>Where your data lives</Eyebrow>
           <Card>
             <Row left={<Radio on />} title={adapter.label} sub={adapter.kind === "supabase" ? "Hosted database · shared with your home · 7-day history" : "Encrypted in this browser only · export to keep a copy"} rightSub={adapter.kind === "supabase" ? "recommended" : "offline"} />

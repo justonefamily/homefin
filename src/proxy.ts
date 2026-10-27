@@ -14,4 +14,4 @@ export async function proxy(req: NextRequest) {
   }
   return res;
 }
-export const config = { matcher: ["/((?!_next|icon.svg|manifest.webmanifest|favicon.ico).*)"] };
+export const config = { matcher: ["/((?!_next|sw.js|offline.html|manifest.webmanifest|favicon.ico|icon.*\\.png|apple-touch-icon.png|icon.svg).*)"] };
