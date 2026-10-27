@@ -29,13 +29,34 @@ export default function AccountsPage() {
   const [editing, setEditing] = useState<Account | "new" | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [links, setLinks] = useState<{ item_id: string; institution: string | null; created_at: string }[]>([]);
+  const loadLinks = useCallback(async () => { if (adapter.kind !== "supabase") return; try { const r = await fetch("/api/plaid/item"); if (r.ok) setLinks((await r.json()).items ?? []); } catch { /* ignore */ } }, [adapter.kind]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void loadLinks(); }, [loadLinks]);
+  const disconnect = async (item_id: string, label: string) => {
+    if (!confirm(`Disconnect ${label}? Its accounts, transactions and history are removed from this home. You can connect it again later.`)) return;
+    setMsg(null);
+    const r = await fetch("/api/plaid/item", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id }) });
+    const j = await r.json();
+    if (!r.ok) { setMsg(j.error ?? "Could not disconnect"); return; }
+    await load(); await loadLinks();
+    setMsg(`Disconnected ${label} (${j.removedAccounts} account${j.removedAccounts === 1 ? "" : "s"} removed).`);
+  };
   const plaidEnabled = adapter.kind === "supabase";
   const historyDays = data.settings.historyDays ?? 730;
   const setHistory = (n: number) => update((h) => ({ ...h, settings: { ...h.settings, historyDays: n } }), "changed history depth");
   const live = data.accounts.filter((a) => a.source === "plaid").length;
 
   const save = (a: Account) => update((h) => ({ ...h, accounts: h.accounts.some((x) => x.id === a.id) ? h.accounts.map((x) => (x.id === a.id ? a : x)) : [...h.accounts, a] }), `saved account ${a.name}`);
-  const remove = (id: string) => update((h) => ({ ...h, accounts: h.accounts.filter((a) => a.id !== id), bills: h.bills.map((b) => (b.accountId === id ? { ...b, accountId: undefined } : b)) }), "removed account");
+  const remove = (id: string) => {
+    const a = data.accounts.find((x) => x.id === id);
+    if (a?.source === "plaid") {
+      // Hide (sync won't re-add it) but keep the bank link; disconnecting the whole bank is a separate action.
+      update((h) => ({ ...h, settings: { ...h.settings, hiddenAccounts: [...(h.settings.hiddenAccounts ?? []), id] }, accounts: h.accounts.filter((x) => x.id !== id), bills: h.bills.map((b) => (b.accountId === id ? { ...b, accountId: undefined } : b)) }), `hid account ${a.name}`);
+      return;
+    }
+    update((h) => ({ ...h, accounts: h.accounts.filter((x) => x.id !== id), bills: h.bills.map((b) => (b.accountId === id ? { ...b, accountId: undefined } : b)) }), "removed account");
+  };
 
   const sync = useCallback(async () => {
     setSyncing(true); setMsg(null);
@@ -65,7 +86,7 @@ export default function AccountsPage() {
         onSuccess: async (publicToken, meta) => {
           const ex = await fetch("/api/plaid/exchange", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ public_token: publicToken, institution: meta.institution?.name }) });
           if (!ex.ok) { setMsg((await ex.json()).error ?? "exchange failed"); return; }
-          await sync();
+          await sync(); await loadLinks();
         },
       }).open();
     } catch (e) { setMsg((e as Error).message); }
@@ -105,6 +126,26 @@ export default function AccountsPage() {
           </div>
           <div className="text-[11px] text-muted leading-relaxed">Plaid provides up to 24 months of transactions, so 2 years is the hard limit. The depth is fixed when a bank is linked — to pull deeper history for an already-linked bank, remove it and connect it again.</div>
         </Card>
+      )}
+
+      {links.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <Eyebrow>Bank connections</Eyebrow>
+          <Card>
+            {links.map((l) => {
+              const n = data.accounts.filter((a) => a.plaidItemId === l.item_id).length;
+              const dupes = links.filter((x) => x.institution === l.institution).length > 1;
+              return (
+                <div key={l.item_id} className="flex items-center gap-3 px-4 py-3 border-b border-line-soft last:border-b-0">
+                  <div className="w-2 h-2 rounded-full bg-green shrink-0" />
+                  <div className="flex-1 min-w-0"><div className="text-sm font-semibold truncate">{l.institution ?? "Bank"}{dupes && <span className="ml-2 text-[11px] font-semibold text-amber">duplicate link</span>}</div><div className="text-[11px] text-muted">linked {new Date(l.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · {n} account{n === 1 ? "" : "s"}</div></div>
+                  <button onClick={() => disconnect(l.item_id, l.institution ?? "this bank")} className="h-9 px-3 rounded-[10px] border border-line bg-card text-xs font-semibold text-red hover:bg-red/5">Disconnect</button>
+                </div>
+              );
+            })}
+          </Card>
+          {(data.settings.hiddenAccounts?.length ?? 0) > 0 && <button onClick={() => update((h) => ({ ...h, settings: { ...h.settings, hiddenAccounts: [] } }), "unhid accounts")} className="text-xs text-accent font-semibold text-left">Show {data.settings.hiddenAccounts!.length} hidden account{data.settings.hiddenAccounts!.length === 1 ? "" : "s"} again (next sync)</button>}
+        </div>
       )}
 
       <div className="md:grid md:grid-cols-2 md:gap-6 flex flex-col gap-4">
@@ -190,8 +231,9 @@ function AccountForm({ acct, onClose, onSave, onDelete }: { acct?: Account; onCl
         <Field label="APR (%)"><input className={inputCls} type="number" inputMode="decimal" step="0.1" value={apr || ""} onChange={(e) => setApr(Number(e.target.value))} /></Field>
         <Field label="Minimum payment ($)"><input className={inputCls} type="number" inputMode="decimal" value={min || ""} onChange={(e) => setMin(Number(e.target.value))} /></Field>
       </div>}
+      {acct?.source === "plaid" && <div className="text-[11px] text-muted">This account comes from a bank link. <b>Hide</b> keeps the bank connected but stops showing this account. To remove the bank entirely, use <b>Disconnect</b> under Bank connections.</div>}
       <div className="flex gap-2 pt-1">
-        {acct && <Button variant="danger" onClick={() => { onDelete(acct.id); onClose(); }}>Remove</Button>}
+        {acct && <Button variant="danger" onClick={() => { onDelete(acct.id); onClose(); }}>{acct.source === "plaid" ? "Hide" : "Remove"}</Button>}
         <Button className="flex-1" disabled={!name} onClick={() => { onSave({ ...(acct ?? { id: uid(), source: "manual" as const }), name, institution: institution || name, kind, balance, apr: isDebt ? apr : undefined, minPayment: isDebt ? min : undefined }); onClose(); }}>Save</Button>
       </div>
     </Modal>

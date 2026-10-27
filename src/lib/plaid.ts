@@ -39,7 +39,9 @@ export function mergeAccounts(home: HomeData, itemId: string, institution: strin
   const date = now.toISOString().slice(0, 10);
   const next = home.accounts.slice();
   const history = (home.balanceHistory ?? []).slice();
+  const hidden = new Set(home.settings.hiddenAccounts ?? []);
   for (const a of accounts) {
+    if (hidden.has(a.account_id)) continue;
     const kind = kindOf(a);
     const balance = kind === "checking" || kind === "savings" ? a.balances.current ?? 0 : a.balances.current ?? 0;
     const existing = next.find((x) => x.id === a.account_id);

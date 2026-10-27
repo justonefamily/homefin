@@ -88,6 +88,8 @@ export interface Settings {
   historyDays?: number;
   /** Merchant keys the user said are "not a bill". */
   dismissedSuggestions?: string[];
+  /** Plaid account ids the user hid — sync skips them without disconnecting the bank. */
+  hiddenAccounts?: string[];
 }
 
 /** A balance reading for an account on a date — Plaid sync appends one each run. Powers debt/net-worth history. */
