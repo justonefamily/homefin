@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { plaid } from "@/lib/plaid";
+import { plaid, plaidError } from "@/lib/plaid";
 import { adminClient } from "@/lib/supabase/server";
 import { requireHome } from "../_shared";
 
@@ -14,6 +14,8 @@ export async function POST(req: Request) {
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    const pe = plaidError(e);
+    console.error("plaid", pe);
+    return NextResponse.json({ error: `Plaid: ${pe.message} (${pe.code})` }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { CountryCode, Products } from "plaid";
-import { plaid } from "@/lib/plaid";
+import { plaid, plaidError } from "@/lib/plaid";
 import { requireHome } from "../_shared";
 
 export async function POST() {
@@ -17,6 +17,8 @@ export async function POST() {
     });
     return NextResponse.json({ link_token: r.data.link_token });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    const pe = plaidError(e);
+    console.error("plaid", pe);
+    return NextResponse.json({ error: `Plaid: ${pe.message} (${pe.code})` }, { status: 500 });
   }
 }

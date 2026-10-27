@@ -1,6 +1,13 @@
 import { Configuration, PlaidApi, PlaidEnvironments, type AccountBase, type Transaction as PlaidTx } from "plaid";
 import type { Account, AccountKind, HomeData, Transaction } from "./types";
 
+/** Plaid errors arrive as axios errors; pull out Plaid's own code and message. */
+export function plaidError(e: unknown): { code: string; message: string } {
+  const r = (e as { response?: { data?: { error_code?: string; error_message?: string; display_message?: string | null } } })?.response?.data;
+  if (r?.error_code) return { code: r.error_code, message: r.display_message ?? r.error_message ?? r.error_code };
+  return { code: "UNKNOWN", message: (e as Error)?.message ?? String(e) };
+}
+
 export const plaidConfigured = () => !!process.env.PLAID_CLIENT_ID && !!process.env.PLAID_SECRET;
 
 export const plaid = () =>

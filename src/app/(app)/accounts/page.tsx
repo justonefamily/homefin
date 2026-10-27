@@ -41,7 +41,10 @@ export default function AccountsPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "sync failed");
       await load();
-      setMsg(`Synced ${j.accounts} accounts, ${j.transactions} new transactions.`);
+      const parts = [`Synced ${j.accounts} account${j.accounts === 1 ? "" : "s"}, ${j.transactions} new transaction${j.transactions === 1 ? "" : "s"}.`];
+      if (j.pending?.length) parts.push(`Transactions for ${j.pending.join(", ")} are still loading at Plaid — tap Sync again in a minute.`);
+      if (j.problems?.length) parts.push(j.problems.join(" · "));
+      setMsg(parts.join(" "));
     } catch (e) { setMsg((e as Error).message); }
     setSyncing(false);
   }, [load]);
@@ -64,7 +67,7 @@ export default function AccountsPage() {
     } catch (e) { setMsg((e as Error).message); }
   }, [sync]);
 
-  useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), 6000); return () => clearTimeout(t); } }, [msg]);
+  useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), 15000); return () => clearTimeout(t); } }, [msg]);
 
   return (
     <>
@@ -85,7 +88,7 @@ export default function AccountsPage() {
             : <><b>Bank linking needs cloud storage.</b> Sign in with Supabase to connect banks through Plaid; on this device you can add accounts manually or import a CSV.</>}
         </div>
       </Card>
-      {msg && <div className="text-xs text-muted">{msg}</div>}
+      {msg && <Card className="p-3 text-xs text-ink">{msg}</Card>}
       {plaidEnabled && <Button variant="dashed" onClick={connect}>Connect a bank, card or loan (Plaid)</Button>}
 
       <div className="md:grid md:grid-cols-2 md:gap-6 flex flex-col gap-4">
