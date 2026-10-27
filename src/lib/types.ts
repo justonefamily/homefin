@@ -90,13 +90,29 @@ export interface Settings {
   dismissedSuggestions?: string[];
   /** Plaid account ids the user hid — sync skips them without disconnecting the bank. */
   hiddenAccounts?: string[];
+  /** Deposit merchant keys the user said are not income sources. */
+  dismissedIncome?: string[];
 }
 
 /** A balance reading for an account on a date — Plaid sync appends one each run. Powers debt/net-worth history. */
 export interface BalancePoint { accountId: string; date: string; balance: number; }
 
-/** Income actually received (Plaid deposits or manual). Optional — projections fall back to `pay.monthlyIncome`. */
-export interface IncomeEvent { id: string; date: string; amount: number; source: string; }
+/** Money actually received (Plaid deposits or manual). `status` is the user's call: counted as income, or ignored (transfers, refunds). */
+export interface IncomeEvent { id: string; date: string; amount: number; source: string; sourceId?: string; status?: "counted" | "ignored"; }
+
+/** An expected, recurring income — a paycheck or other regular money in. Actual deposits attach to it as IncomeEvents. */
+export interface IncomeSource {
+  id: string;
+  name: string;
+  kind: "paycheck" | "other";
+  /** Normalized merchant key used to match deposits automatically. */
+  merchant?: string;
+  /** Expected amount per deposit. */
+  expected: number;
+  cadence: "weekly" | "biweekly" | "semimonthly" | "monthly";
+  /** Days of month for semimonthly/monthly; approximate for weekly/biweekly. */
+  payDays: number[];
+}
 
 export interface HomeData {
   version: 1;
@@ -110,6 +126,7 @@ export interface HomeData {
   transactions: Transaction[];
   balanceHistory?: BalancePoint[];
   income?: IncomeEvent[];
+  incomeSources?: IncomeSource[];
   /** The Focus board: widgets the household composed. See lib/widgets.ts. */
   dashboard?: { widgets: import("./widgets").Widget[] };
   /** True once the welcome screen has been completed, so an empty-but-created home opens straight into the app. */

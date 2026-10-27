@@ -11,11 +11,12 @@ import { Button, Card, Eyebrow, Segmented, SectionTitle, Stat, cx, fmt, money } 
 import { billStatuses, currentPeriod, inPeriod, periodLabel, weeklyProjection, yearProjection } from "@/lib/projections";
 import { monthKey } from "@/lib/strategies";
 import type { Bill } from "@/lib/types";
-import { autoMarkPaid, detectRecurring, suggestionToBill, type Suggestion } from "@/lib/detect";
+import { autoMarkPaid, detectRecurring, merchantKey, suggestionToBill, type Suggestion } from "@/lib/detect";
 import { uid } from "@/lib/storage/adapter";
 import { Sparkles } from "lucide-react";
+import { IncomeView } from "@/components/IncomeView";
 
-type View = "month" | "weeks" | "year";
+type View = "month" | "weeks" | "year" | "income";
 
 export default function BillsPage() {
   const params = useSearchParams();
@@ -42,6 +43,11 @@ export default function BillsPage() {
     const next = { ...h, bills: [...h.bills, bill] };
     return { ...next, payments: [...next.payments, ...autoMarkPaid(next)] };
   }, `added bill ${sg.name} from transactions`);
+  const dismissedKeys = data.settings.dismissedSuggestions ?? [];
+  const [showDismissed, setShowDismissed] = useState(false);
+  const restoreDismissed = (key: string) => update((h) => ({ ...h, settings: { ...h.settings, dismissedSuggestions: (h.settings.dismissedSuggestions ?? []).filter((k) => k !== key) } }), "restored a suggestion");
+  /** Undo a confirmed bill that was wrong: delete it, its auto-payments, and remember it's not a bill. */
+  const notABill = (b: Bill) => update((h) => ({ ...h, bills: h.bills.filter((x) => x.id !== b.id), payments: h.payments.filter((p) => p.billId !== b.id), settings: { ...h.settings, dismissedSuggestions: [...(h.settings.dismissedSuggestions ?? []), b.merchant ?? merchantKey(b.name)] } }), `not a bill: ${b.name}`);
   const dismissSuggestion = (sg: Suggestion) => update((h) => ({ ...h, settings: { ...h.settings, dismissedSuggestions: [...(h.settings.dismissedSuggestions ?? []), sg.key] } }), `not a bill: ${sg.name}`);
 
   const saveBill = (b: Bill) => update((h) => ({ ...h, bills: h.bills.some((x) => x.id === b.id) ? h.bills.map((x) => (x.id === b.id ? b : x)) : [...h.bills, b] }), `saved bill ${b.name}`);
@@ -54,10 +60,10 @@ export default function BillsPage() {
   return (
     <>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Bills</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{view === "income" ? "Income" : "Bills"}</h1>
         <div className="text-[13px] text-muted">{view === "year" ? today.getFullYear() : today.toLocaleString("en-US", { month: "long", year: "numeric" })}</div>
       </div>
-      <div className="md:max-w-sm"><Segmented value={view} onChange={setView} options={[{ id: "month", label: "Month" }, { id: "weeks", label: "Weeks" }, { id: "year", label: "Year" }]} /></div>
+      <div className="md:max-w-sm"><Segmented value={view} onChange={setView} options={[{ id: "month", label: "Month" }, { id: "weeks", label: "Weeks" }, { id: "year", label: "Year" }, { id: "income", label: "Income" }]} /></div>
 
       {view === "month" && suggestions.length > 0 && (
         <Card className="p-4 flex flex-col gap-3 border-accent-line bg-accent-bg/40">
@@ -78,6 +84,13 @@ export default function BillsPage() {
           </div>
           <div className="text-[11px] text-muted">Confirming adds the bill and marks every month it was already paid. Edit the amount, due day or category afterwards by tapping the bill.</div>
         </Card>
+      )}
+
+      {view === "month" && dismissedKeys.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <button onClick={() => setShowDismissed(!showDismissed)} className="text-xs text-muted text-left">{dismissedKeys.length} payment{dismissedKeys.length === 1 ? "" : "s"} marked &quot;not a bill&quot; · <span className="text-accent font-semibold">{showDismissed ? "hide" : "review"}</span></button>
+          {showDismissed && <Card>{dismissedKeys.map((k) => <div key={k} className="flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0"><div className="flex-1 text-[13px] capitalize">{k}</div><button onClick={() => restoreDismissed(k)} className="h-8 px-2.5 rounded-[8px] border border-chip text-[11px] font-semibold hover:border-field">Suggest again</button></div>)}</Card>}
+        </div>
       )}
 
       {view === "month" && (
@@ -142,9 +155,10 @@ export default function BillsPage() {
       )}
 
       {view === "weeks" && <WeeksView />}
+      {view === "income" && <IncomeView today={today} />}
       {view === "year" && <YearView />}
 
-      {editing && <BillForm open onClose={() => setEditing(null)} data={data} bill={editing === "new" ? undefined : editing} onSave={saveBill} onDelete={deleteBill} />}
+      {editing && <BillForm open onClose={() => setEditing(null)} data={data} bill={editing === "new" ? undefined : editing} onSave={saveBill} onDelete={deleteBill} onNotABill={notABill} />}
     </>
   );
 }

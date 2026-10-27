@@ -176,3 +176,26 @@ describe("period options respect data range", () => {
     expect(periodOptions("month", new Date(2026, 9, 27), null)).toHaveLength(1);
   });
 });
+
+describe("income sources: expected vs actual", () => {
+  it("projection uses sources; deposits attach and count", async () => {
+    const { expectedMonthlyIncome, expectedPayDays, matchIncomeEvents, receivedInMonth, suggestionToSource, detectIncome } = await import("./detect");
+    const h = sampleHome(new Date(2026, 9, 27));
+    const income = [] as NonNullable<typeof h.income>;
+    for (const m of ["2026-07", "2026-08", "2026-09", "2026-10"]) { income.push({ id: "a" + m, date: `${m}-01`, amount: 3150, source: "DAYSTAR MINISTRIES PAYROLL" }); income.push({ id: "b" + m, date: `${m}-16`, amount: 3150, source: "DAYSTAR MINISTRIES PAYROLL" }); }
+    income.push({ id: "z", date: "2026-10-20", amount: 250, source: "Zelle from Mom" });
+    let data = { ...h, income, incomeSources: [] as NonNullable<typeof h.incomeSources> };
+    expect(expectedMonthlyIncome(data)).toBe(6400); // falls back to settings
+    const sg = detectIncome(data, new Date(2026, 9, 27))[0];
+    data = { ...data, incomeSources: [suggestionToSource({ ...sg, perPaycheck: 3200 }, "s1", "paycheck")] };
+    expect(expectedMonthlyIncome(data)).toBe(6400);
+    expect(expectedPayDays(data)).toEqual([1, 16]);
+    const matched = matchIncomeEvents(data)!;
+    expect(matched.filter((e) => e.sourceId === "s1")).toHaveLength(8);
+    data = { ...data, income: matched };
+    expect(receivedInMonth(data, "2026-10")).toBe(6300); // actual, not projected
+    data = { ...data, income: data.income.map((e) => (e.id === "z" ? { ...e, status: "counted" as const } : e)) };
+    expect(receivedInMonth(data, "2026-10")).toBe(6550);
+    expect(detectIncome(data, new Date(2026, 9, 27))).toHaveLength(0); // known source not re-suggested
+  });
+});

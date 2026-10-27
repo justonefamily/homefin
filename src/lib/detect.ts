@@ -1,4 +1,4 @@
-import type { Bill, BillPayment, HomeData, Transaction } from "./types";
+import type { Bill, BillPayment, HomeData, IncomeEvent, IncomeSource, Transaction } from "./types";
 
 /**
  * Learn from what the bank already shows.
@@ -153,9 +153,11 @@ export interface IncomeSuggestion {
 
 export function detectIncome(data: HomeData, today = new Date()): IncomeSuggestion[] {
   const groups = new Map<string, { date: string; amount: number }[]>();
+  const known = new Set([...(data.incomeSources ?? []).map((s) => s.merchant ?? ""), ...(data.settings.dismissedIncome ?? [])]);
   for (const i of data.income ?? []) {
+    if (i.status === "ignored") continue;
     const k = merchantKey(i.source);
-    if (k.length < 3 || i.amount < 50) continue;
+    if (k.length < 3 || i.amount < 50 || known.has(k)) continue;
     (groups.get(k) ?? groups.set(k, []).get(k)!).push({ date: i.date, amount: i.amount });
   }
   const out: IncomeSuggestion[] = [];
@@ -192,3 +194,48 @@ export function detectIncome(data: HomeData, today = new Date()): IncomeSuggesti
   }
   return out.sort((a, b) => b.monthly - a.monthly);
 }
+
+/* ------------------------------------------------------------------ */
+/* Income sources: expected vs actual                                  */
+/* ------------------------------------------------------------------ */
+
+export const monthlyOf = (expected: number, cadence: IncomeSource["cadence"]) =>
+  cadence === "weekly" ? expected * 52 / 12 : cadence === "biweekly" ? expected * 26 / 12 : cadence === "semimonthly" ? expected * 2 : expected;
+
+/** Projected monthly income: the sum of expected sources when any exist, else the number in Settings. */
+export const expectedMonthlyIncome = (data: HomeData) => {
+  const src = data.incomeSources ?? [];
+  return src.length ? src.reduce((s, x) => s + monthlyOf(x.expected, x.cadence), 0) : data.pay.monthlyIncome;
+};
+
+/** Paydays for projections: from paycheck sources when any exist, else Settings. */
+export const expectedPayDays = (data: HomeData) => {
+  const days = [...new Set((data.incomeSources ?? []).filter((s) => s.kind === "paycheck").flatMap((s) => s.payDays))].sort((a, b) => a - b);
+  return days.length ? days : data.pay.payDays;
+};
+
+/** Attach deposits to sources by merchant key and mark them counted. Returns the updated events (only when something changed). */
+export function matchIncomeEvents(data: HomeData): IncomeEvent[] | null {
+  const sources = data.incomeSources ?? [];
+  if (!sources.length) return null;
+  let changed = false;
+  const out = (data.income ?? []).map((e) => {
+    if (e.sourceId || e.status === "ignored") return e;
+    const k = merchantKey(e.source);
+    const src = sources.find((s) => s.merchant === k);
+    if (!src) return e;
+    changed = true;
+    return { ...e, sourceId: src.id, status: "counted" as const };
+  });
+  return changed ? out : null;
+}
+
+export const suggestionToSource = (s: IncomeSuggestion, id: string, kind: IncomeSource["kind"]): IncomeSource =>
+  ({ id, name: s.source, kind, merchant: s.key, expected: s.perPaycheck, cadence: s.cadence, payDays: s.payDays });
+
+/** Income received in a month: counted events (attached or explicitly counted). */
+export const receivedInMonth = (data: HomeData, month: string) =>
+  (data.income ?? []).filter((e) => e.date.startsWith(month) && (e.status === "counted" || e.sourceId)).reduce((s, e) => s + e.amount, 0);
+
+/** Deposits nobody has decided on yet (not attached to a source, not counted, not ignored). */
+export const unreviewedDeposits = (data: HomeData) => (data.income ?? []).filter((e) => !e.sourceId && !e.status).sort((a, b) => b.date.localeCompare(a.date));

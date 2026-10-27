@@ -12,7 +12,8 @@ import { Card, Mark, Row, SectionTitle, cx, fmt, money } from "@/components/ui";
 import { billStatuses, currentPeriod, inPeriod, periodLabel, weeklyProjection } from "@/lib/projections";
 import { debtsFromAccounts, simulatePayoff, strategyMeta } from "@/lib/strategies";
 import { CreditCard, BarChart3, CalendarDays, Sparkles } from "lucide-react";
-import { detectIncome, detectRecurring } from "@/lib/detect";
+import { detectIncome, detectRecurring, expectedMonthlyIncome, matchIncomeEvents, merchantKey, suggestionToSource } from "@/lib/detect";
+import { uid } from "@/lib/storage/adapter";
 
 export default function HomePage() {
   const { data: d, update } = useHome();
@@ -27,7 +28,7 @@ export default function HomePage() {
   const total = statuses.reduce((s, b) => s + b.bill.amount, 0);
   const paid = statuses.filter((s) => s.paid).reduce((s, b) => s + b.bill.amount, 0);
   const pct = total ? Math.round((paid / total) * 100) : 0;
-  const paycheck = data.pay.monthlyIncome / Math.max(1, data.pay.payDays.length);
+  const paycheck = expectedMonthlyIncome(data) / Math.max(1, data.pay.payDays.length);
   const weeks = weeklyProjection(data, today);
   const strat = strategyMeta(data.settings.strategy);
   const plan = simulatePayoff(debtsFromAccounts(data.accounts), data.settings.strategy, data.settings.extraPayment);
@@ -50,29 +51,30 @@ export default function HomePage() {
       {(() => {
         const inc = detectIncome(data, today);
         const top = inc[0];
-        const already = top && data.pay.monthlyIncome === top.monthly && data.pay.payDays.join() === top.payDays.join();
         const billSg = detectRecurring(data, today).length;
-        if (!top || already) return billSg > 0 ? (
+        if (!top) return billSg > 0 ? (
           <Link href="/bills" className="block"><Card className="p-3.5 flex items-center gap-2.5 border-accent-line bg-accent-bg/40 hover:border-accent"><Sparkles size={16} className="text-accent shrink-0" /><div className="text-[13px]"><b>{billSg} recurring payment{billSg > 1 ? "s" : ""}</b> in your transactions look like bills — review them on Bills.</div><div className="ml-auto text-xs text-accent font-semibold">Review ›</div></Card></Link>
         ) : null;
         return (
           <Card className="p-4 flex flex-col gap-2.5 border-accent-line bg-accent-bg/40">
-            <div className="flex items-center gap-2"><Sparkles size={16} className="text-accent" /><div className="text-sm font-semibold">Looks like this is your paycheck</div></div>
-            <div className="text-[13px]"><b>{top.source}</b> · {money(top.perPaycheck)} {top.cadence === "semimonthly" ? `on the ${top.payDays.join(" and ")}` : top.cadence} · about <b>{money(top.monthly)}/mo</b>{inc.length > 1 ? ` (+${inc.length - 1} other source${inc.length > 2 ? "s" : ""})` : ""}</div>
-            <div className="flex gap-2">
-              <button onClick={() => update((h) => ({ ...h, pay: { ...h.pay, monthlyIncome: inc.reduce((s, x) => s + x.monthly, 0), payDays: top.payDays } }), "set pay schedule from transactions")} className="h-9 px-3 rounded-[10px] bg-accent text-white text-xs font-semibold hover:bg-accent-deep">Use this as my pay schedule</button>
-              <Link href="/settings" className="h-9 px-3 rounded-[10px] border border-chip bg-card text-xs font-semibold flex items-center hover:border-field">Edit manually</Link>
+            <div className="flex items-center gap-2"><Sparkles size={16} className="text-accent" /><div className="text-sm font-semibold">Looks like regular income</div></div>
+            <div className="text-[13px]"><b>{top.source}</b> · {money(top.perPaycheck)} {top.cadence === "semimonthly" ? `on the ${top.payDays.join(" and ")}` : top.cadence === "biweekly" ? "every 2 weeks" : top.cadence} · about <b>{money(top.monthly)}/mo</b>{inc.length > 1 ? ` · +${inc.length - 1} more on the Income tab` : ""}</div>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => update((h) => { const next = { ...h, incomeSources: [...(h.incomeSources ?? []), suggestionToSource(top, uid(), "paycheck")] }; return { ...next, income: matchIncomeEvents(next) ?? next.income }; }, `added paycheck ${top.source}`)} className="h-9 px-3 rounded-[10px] bg-accent text-white text-xs font-semibold hover:bg-accent-deep">It&apos;s my paycheck</button>
+              <button onClick={() => update((h) => { const next = { ...h, incomeSources: [...(h.incomeSources ?? []), suggestionToSource(top, uid(), "other")] }; return { ...next, income: matchIncomeEvents(next) ?? next.income }; }, `added income ${top.source}`)} className="h-9 px-3 rounded-[10px] border border-chip bg-card text-xs font-semibold hover:border-field">Other income</button>
+              <button onClick={() => update((h) => ({ ...h, settings: { ...h.settings, dismissedIncome: [...(h.settings.dismissedIncome ?? []), top.key] }, income: (h.income ?? []).map((e) => (merchantKey(e.source) === top.key && !e.sourceId ? { ...e, status: "ignored" as const } : e)) }), `ignored ${top.source}`)} className="h-9 px-3 rounded-[10px] text-xs font-semibold text-muted hover:bg-surface">Ignore</button>
+              <Link href="/bills?view=income" className="h-9 px-3 rounded-[10px] text-xs font-semibold text-accent flex items-center hover:bg-accent-bg">Open Income ›</Link>
             </div>
             {billSg > 0 && <div className="text-[11px] text-muted">Also found {billSg} recurring payment{billSg > 1 ? "s" : ""} that look like bills — <Link href="/bills" className="text-accent font-semibold">review on Bills</Link>.</div>}
           </Card>
         );
       })()}
-      {(data.pay.monthlyIncome === 0 || data.bills.length === 0 || data.budgets.length === 0) && (
+      {(expectedMonthlyIncome(data) === 0 || data.bills.length === 0 || data.budgets.length === 0) && (
         <Card className="p-4 flex flex-col gap-3">
           <div className="text-[15px] font-semibold">Set up {data.homeName}</div>
           <div className="text-[13px] text-muted">Three things make everything else light up:</div>
           <div className="flex flex-col gap-2">
-            <SetupRow done={data.pay.monthlyIncome > 0} href="/settings" label="Enter your take-home pay and paydays" sub="Settings → Pay schedule" />
+            <SetupRow done={expectedMonthlyIncome(data) > 0} href="/bills?view=income" label="Set up your income" sub="Bills → Income (confirm a paycheck, or add one manually)" />
             <SetupRow done={data.bills.length > 0} href="/bills" label="Add your bills with due days" sub="Bills → + Add a bill (or connect a biller later)" />
             <SetupRow done={data.budgets.length > 0} href="/plan?view=budget" label="Create budget categories" sub="Plan → Budget → + Add a budget category" />
             <SetupRow done={data.accounts.length > 0} href="/accounts" label="Connect or add your accounts" sub="Accounts → Connect a bank (Plaid) or + Add" optional />

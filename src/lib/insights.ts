@@ -80,7 +80,7 @@ export function compare(data: HomeData, metric: MetricId, a: PeriodRef, b: Perio
   const spend = (months: string[], cat?: string) => data.transactions.filter((t) => inMonths(t.date, months) && (!cat || t.category === cat)).reduce((s, t) => s + t.amount, 0);
   const billsPaid = (months: string[]) => data.payments.filter((p) => months.includes(p.month)).reduce((s, p) => s + p.amount, 0);
   const income = (months: string[]) => {
-    const ev = (data.income ?? []).filter((i) => inMonths(i.date, months));
+    const ev = (data.income ?? []).filter((i) => inMonths(i.date, months) && (i.status === "counted" || i.sourceId));
     return ev.length ? ev.reduce((s, i) => s + i.amount, 0) : data.pay.monthlyIncome * months.length;
   };
   const hasAny = (months: string[]) =>

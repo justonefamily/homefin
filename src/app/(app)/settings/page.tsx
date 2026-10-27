@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Home, RotateCcw } from "lucide-react";
+import { ChevronDown, Home, RotateCcw } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Field, Modal, Row, cx, inputCls, selectCls } from "@/components/ui";
 import { exportJson, importJson } from "@/lib/storage/local";
@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [payOpen, setPayOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const cloud = supabaseConfigured() && adapter.kind === "supabase";
   const homeId = cloud ? (adapter as unknown as { homeId: string }).homeId : null;
 
@@ -69,17 +70,23 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          <div className="flex items-baseline justify-between pt-1.5"><Eyebrow>Version history</Eyebrow><div className="text-[11px] text-muted">rolling 7 days{cloud ? ", saved to the cloud" : ", on this device"}</div></div>
           <Card>
-            <Row left={<Dot on />} title="Current version" sub={`${adapter.label}`} rightSub="current" rightTone="text-green" />
-            {snapshots.length === 0 && <div className="px-4 py-3 text-xs text-muted">No earlier versions yet — one is kept every time something changes.</div>}
-            {snapshots.map((s) => (
-              <div key={s.id} className="flex items-center gap-3 px-4 py-3 border-b border-line-soft last:border-b-0">
-                <Dot />
-                <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold">{new Date(s.takenAt).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div><div className="text-[11px] text-muted truncate">{s.by} · {s.note}</div></div>
-                <button onClick={() => { if (confirm(`Restore the version from ${new Date(s.takenAt).toLocaleString()}? The current version is kept in history too.`)) restore(s.id); }} className="h-9 px-3 rounded-[10px] border border-chip bg-card text-xs font-semibold hover:border-field">Restore</button>
+            <button onClick={() => setHistoryOpen(!historyOpen)} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface/60">
+              <Dot on />
+              <div className="flex-1 min-w-0"><div className="text-sm font-semibold">Version history</div><div className="text-[11px] text-muted">{snapshots.length} earlier version{snapshots.length === 1 ? "" : "s"} in the last 7 days{snapshots[0] ? ` · latest ${new Date(snapshots[0].takenAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}</div></div>
+              <ChevronDown size={16} className={cx("text-muted transition-transform", historyOpen && "rotate-180")} />
+            </button>
+            {historyOpen && (
+              <div className="border-t border-line-soft max-h-72 overflow-y-auto">
+                {snapshots.length === 0 && <div className="px-4 py-3 text-xs text-muted">No earlier versions yet — one is kept every time something changes.</div>}
+                {snapshots.map((s) => (
+                  <div key={s.id} className="flex items-center gap-3 px-4 py-2 border-b border-line-soft last:border-b-0">
+                    <div className="flex-1 min-w-0 text-[12px]"><span className="font-semibold">{new Date(s.takenAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span> <span className="text-muted">· {s.by} · {s.note}</span></div>
+                    <button onClick={() => { if (confirm(`Restore the version from ${new Date(s.takenAt).toLocaleString()}? The current version is kept in history too.`)) restore(s.id); }} className="h-7 px-2.5 rounded-[8px] border border-chip bg-card text-[11px] font-semibold hover:border-field">Restore</button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </Card>
         </div>
 
@@ -100,7 +107,7 @@ export default function SettingsPage() {
 
           <Eyebrow className="pt-1.5">Preferences</Eyebrow>
           <Card>
-            <Row onClick={() => setPayOpen(true)} title="Pay schedule" sub={`$${data.pay.monthlyIncome.toLocaleString()}/mo · paid on the ${data.pay.payDays.join(" & ")} · split at the ${data.pay.splitDay}th`} rightSub="edit ›" />
+            <Row onClick={() => setPayOpen(true)} title="Pay schedule (fallback)" sub={(data.incomeSources?.length ?? 0) > 0 ? `Projections use your Income sources · split at the ${data.pay.splitDay}th` : `$${data.pay.monthlyIncome.toLocaleString()}/mo · paid on the ${data.pay.payDays.join(" & ")} · split at the ${data.pay.splitDay}th`} rightSub="edit ›" />
             <div className="flex items-center justify-between px-4 py-3 border-b border-line-soft"><div className="text-sm">Bill reminders</div>
               <select className={cx(selectCls, "w-36 h-9 text-xs")} value={data.settings.reminderDays} onChange={(e) => update((h) => ({ ...h, settings: { ...h.settings, reminderDays: Number(e.target.value) } }), "changed reminders")}>{[1, 2, 3, 5, 7].map((n) => <option key={n} value={n}>{n} day{n > 1 ? "s" : ""} before</option>)}</select></div>
             <div className="flex items-center justify-between px-4 py-3 border-b border-line-soft"><div className="text-sm">Default strategy</div>

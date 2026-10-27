@@ -1,4 +1,5 @@
 import type { Account, BudgetCategory, HomeData, StrategyId, Transaction } from "./types";
+import { expectedMonthlyIncome } from "./detect";
 
 /* ------------------------------------------------------------------ */
 /* Catalogue                                                           */
@@ -166,7 +167,7 @@ export function actualByBucket(data: HomeData, month: string): Record<BudgetCate
 }
 
 export function splitRows(data: HomeData, strategy: "503020" | "sixcans", month: string): SplitRow[] {
-  const income = data.pay.monthlyIncome;
+  const income = expectedMonthlyIncome(data);
   const actual = actualByBucket(data, month);
   return SPLITS[strategy].map((s) => ({
     id: s.id, name: s.name, pct: s.pct, what: s.what,

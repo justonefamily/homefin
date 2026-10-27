@@ -1,6 +1,7 @@
 import { addDays, endOfMonth, getDaysInMonth, startOfMonth } from "date-fns";
 import type { Bill, HomeData } from "./types";
 import { monthKey } from "./strategies";
+import { expectedMonthlyIncome, expectedPayDays } from "./detect";
 
 /* ------------------------------------------------------------------ */
 /* Pay periods: 1st–splitDay and (splitDay+1)–end of month             */
@@ -60,14 +61,15 @@ export function weeklyProjection(data: HomeData, today: Date): WeekRow[] {
   const first = startOfMonth(today);
   const last = endOfMonth(today);
   const dim = getDaysInMonth(today);
-  const paycheck = data.pay.monthlyIncome / Math.max(1, data.pay.payDays.length);
+  const payDays = expectedPayDays(data);
+  const paycheck = expectedMonthlyIncome(data) / Math.max(1, payDays.length);
   const everydayPerDay = data.settings.everydaySpend / dim;
   const statuses = billStatuses(data, today);
 
   // Per-day net flow for the whole month.
   const flow: number[] = Array(dim + 1).fill(0);
   for (let d = 1; d <= dim; d++) {
-    if (data.pay.payDays.includes(d)) flow[d] += paycheck;
+    if (payDays.includes(d)) flow[d] += paycheck;
     flow[d] -= everydayPerDay;
   }
   for (const s of statuses) flow[s.dueDate.getDate()] -= s.bill.amount;
@@ -87,7 +89,7 @@ export function weeklyProjection(data: HomeData, today: Date): WeekRow[] {
     let income = 0, bills = 0, everyday = 0;
     const billNames: string[] = [];
     for (let d = cursor.getDate(); d <= end.getDate(); d++) {
-      if (data.pay.payDays.includes(d)) income += paycheck;
+      if (payDays.includes(d)) income += paycheck;
       everyday += everydayPerDay;
       for (const s of statuses) if (s.dueDate.getDate() === d) { bills += s.bill.amount; billNames.push(s.bill.name); }
     }
@@ -117,7 +119,8 @@ export function yearProjection(data: HomeData, today: Date): MonthRow[] {
     const paidBills = data.payments.filter((p) => p.month === key).reduce((s, p) => s + p.amount, 0);
     const bills = state === "future" ? monthlyBills : paidBills || monthlyBills;
     const everyday = state === "past" && tx ? tx : data.settings.everydaySpend;
-    const net = data.pay.monthlyIncome - bills - everyday - data.settings.extraPayment;
-    return { month: m, name: d.toLocaleString("en-US", { month: "short" }), key, income: data.pay.monthlyIncome, bills, net, state };
+    const monthlyIncome = expectedMonthlyIncome(data);
+    const net = monthlyIncome - bills - everyday - data.settings.extraPayment;
+    return { month: m, name: d.toLocaleString("en-US", { month: "short" }), key, income: monthlyIncome, bills, net, state };
   });
 }

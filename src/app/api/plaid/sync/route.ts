@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { mergeAccounts, mergeTransactions, plaid, plaidError } from "@/lib/plaid";
-import { autoMarkPaid } from "@/lib/detect";
+import { autoMarkPaid, matchIncomeEvents } from "@/lib/detect";
 import { adminClient } from "@/lib/supabase/server";
 import { CountryCode } from "plaid";
 import type { HomeData } from "@/lib/types";
@@ -77,6 +77,8 @@ export async function POST() {
     }
   }
 
+  const matched = matchIncomeEvents(home);
+  if (matched) home = { ...home, income: matched };
   const autoPaid = autoMarkPaid(home);
   if (autoPaid.length) home = { ...home, payments: [...home.payments, ...autoPaid] };
   const { error } = await ctx.sb.from("home_data").update({ data: home, note: "synced accounts" }).eq("home_id", ctx.homeId);
