@@ -3,7 +3,9 @@
 revoke execute on function public.create_home(text, text) from public, anon;
 revoke execute on function public.accept_invite(text, text) from public, anon;
 revoke execute on function public.restore_home_snapshot(uuid) from public, anon;
-revoke execute on function public.is_home_member(uuid, text) from public, anon, authenticated;
+-- is_home_member is called from RLS policies as the querying role, so it MUST stay executable by authenticated/anon.
+revoke execute on function public.is_home_member(uuid, text) from public;
+grant execute on function public.is_home_member(uuid, text) to authenticated, anon;
 revoke execute on function public.home_data_snapshot() from public, anon, authenticated;
 grant execute on function public.create_home(text, text) to authenticated;
 grant execute on function public.accept_invite(text, text) to authenticated;

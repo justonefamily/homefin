@@ -25,6 +25,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data, status, adapter, setAdapter, load, onboarded } = useHome();
   const [booted, setBooted] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  const [bootError, setBootError] = useState<string | null>(null);
 
   // Pick the storage adapter once: Supabase when configured + signed in, else local.
   useEffect(() => {
@@ -34,10 +35,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         const { data: { user } } = await sb.auth.getUser();
         if (!user) { router.replace("/login"); return; }
         setUserName(user.user_metadata?.name ?? user.email ?? "you");
-        const { data: members } = await sb.from("home_members").select("home_id").limit(1);
+        const { data: members, error: mErr } = await sb.from("home_members").select("home_id").limit(1);
+        if (mErr) { setBootError(`Couldn't read your home: ${mErr.message}`); setBooted(true); return; }
         let homeId = members?.[0]?.home_id as string | undefined;
         if (!homeId) {
-          const { data: created } = await sb.rpc("create_home", { p_name: "My home", p_display_name: user.user_metadata?.name ?? null });
+          const { data: created, error: cErr } = await sb.rpc("create_home", { p_name: "My home", p_display_name: user.user_metadata?.name ?? null });
+          if (cErr) { setBootError(`Couldn't create a home: ${cErr.message}`); setBooted(true); return; }
           homeId = created as string;
         }
         await setAdapter(new SupabaseAdapter(sb, homeId!));
@@ -49,6 +52,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (bootError) {
+    return <div className="flex-1 flex items-center justify-center p-6 text-sm text-red text-center max-w-md mx-auto">{bootError}<br /><span className="text-muted">Try reloading; if it persists, check Supabase RLS / function grants.</span></div>;
+  }
   if (!booted || (status === "loading" && !data)) {
     return <div className="flex-1 flex items-center justify-center text-muted gap-2 text-sm"><Loader2 className="animate-spin" size={18} /> Loading your home…</div>;
   }
