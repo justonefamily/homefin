@@ -120,6 +120,18 @@ export interface IncomeSource {
   payDays: number[];
 }
 
+/** A planned, dated expense (or windfall) for the year plan: a trip, tuition, a wedding, a tax refund. */
+export interface Landmark {
+  id: string;
+  name: string;
+  /** YYYY-MM */
+  month: string;
+  /** Positive = money out (default). Negative = money in (a refund, bonus). */
+  amount: number;
+  note?: string;
+  category?: string;
+}
+
 export interface HomeData {
   version: 1;
   homeName: string;
@@ -133,6 +145,7 @@ export interface HomeData {
   balanceHistory?: BalancePoint[];
   income?: IncomeEvent[];
   incomeSources?: IncomeSource[];
+  landmarks?: Landmark[];
   /** The Focus board: widgets the household composed. See lib/widgets.ts. */
   dashboard?: { widgets: import("./widgets").Widget[] };
   /** True once the welcome screen has been completed, so an empty-but-created home opens straight into the app. */

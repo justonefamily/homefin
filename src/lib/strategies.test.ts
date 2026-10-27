@@ -222,3 +222,20 @@ describe("budget recommendations", () => {
     expect(applied.budgets.find((b) => b.id === "subs")!.limit).toBe(120);
   });
 });
+
+describe("year plan", () => {
+  it("projects 12 months with landmarks and a running pocket", async () => {
+    const { buildYearPlan } = await import("./yearplan");
+    const h = sampleHome(new Date(2026, 9, 27));
+    const data = { ...h, landmarks: [{ id: "l1", name: "Family trip", month: "2027-06", amount: 2500 }, { id: "l2", name: "Tax refund", month: "2027-03", amount: -1200 }, { id: "old", name: "last year", month: "2026-05", amount: 999 }] };
+    const yp = buildYearPlan(data, 2027, new Date(2026, 9, 27));
+    expect(yp.months).toHaveLength(12);
+    expect(yp.totals.landmarkCount).toBe(2);
+    expect(yp.totals.landmarks).toBe(1300);
+    expect(yp.months[5].landmarkTotal).toBe(2500);
+    expect(yp.months[11].cumulative).toBeCloseTo(yp.months.reduce((s, m) => s + m.net, 0), 6);
+    expect(yp.totals.pocketEnd).toBeCloseTo(yp.startBalance + yp.totals.net, 6);
+    expect(yp.totals.debtEnd).toBeLessThan(yp.totals.debtStart);
+    expect(yp.months[0].income).toBe(6400);
+  });
+});

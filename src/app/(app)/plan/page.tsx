@@ -10,6 +10,7 @@ import type { BudgetCategory, StrategyId } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
 import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
 import { Sparkles } from "lucide-react";
+import { YearPlanView } from "@/components/YearPlanView";
 
 const SPLIT_COLORS = ["bg-accent", "bg-amber", "bg-teal", "bg-muted-2", "bg-ink", "bg-gold"];
 const SPLIT_HEX = ["#0e6b74", "#b45309", "#4fb3bc", "#7a8294", "#141821", "#d9a066"];
@@ -19,7 +20,7 @@ export default function PlanPage() {
   const { data: d, update } = useHome();
   const data = d!;
   const today = useToday();
-  const [view, setView] = useState<"strategy" | "budget">((params.get("view") as "budget") === "budget" ? "budget" : "strategy");
+  const [view, setView] = useState<"strategy" | "budget" | "year">((["budget", "year"].includes(params.get("view") ?? "") ? params.get("view") : "strategy") as "strategy");
   const strat = strategyMeta(data.settings.strategy);
   const setStrategy = (s: StrategyId) => update((h) => ({ ...h, settings: { ...h.settings, strategy: s } }), `switched strategy to ${strategyMeta(s).name}`);
   const setExtra = (n: number) => update((h) => ({ ...h, settings: { ...h.settings, extraPayment: n } }), "changed extra payment");
@@ -27,7 +28,7 @@ export default function PlanPage() {
   return (
     <>
       <h1 className="text-2xl font-bold tracking-tight">Plan</h1>
-      <div className="md:max-w-sm"><Segmented value={view} onChange={setView} options={[{ id: "strategy", label: "Strategy" }, { id: "budget", label: "Budget" }]} /></div>
+      <div className="md:max-w-md"><Segmented value={view} onChange={setView} options={[{ id: "strategy", label: "Strategy" }, { id: "budget", label: "Budget" }, { id: "year", label: `${today.getFullYear() + 1} plan` }]} /></div>
 
       {view === "strategy" && (
         <div className="md:grid md:grid-cols-12 md:gap-6 flex flex-col gap-4">
@@ -53,6 +54,7 @@ export default function PlanPage() {
       )}
 
       {view === "budget" && <BudgetView today={today} />}
+      {view === "year" && <YearPlanView today={today} />}
     </>
   );
 }
