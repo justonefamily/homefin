@@ -85,6 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="font-semibold text-ink truncate">{data.homeName}</div>
           <div className="flex items-center gap-1.5">{adapter.kind === "local" ? <CloudOff size={13} /> : <Cloud size={13} />} {adapter.label}{userName ? ` · ${userName}` : ""}</div>
           <SaveStatus />
+          <div className="text-[10px] text-muted-3">build {process.env.NEXT_PUBLIC_BUILD_ID ?? "dev"}</div>
         </div>
       </aside>
 

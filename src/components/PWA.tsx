@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Download, Share } from "lucide-react";
+import { Download, RefreshCw, Share } from "lucide-react";
 import { Button, Card } from "./ui";
 
 interface BIPEvent extends Event { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> }
@@ -9,12 +9,45 @@ if (typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferred = e as BIPEvent; window.dispatchEvent(new Event("homefin:installable")); });
 }
 
-/** Registers the service worker once. Mount anywhere in the tree. */
+/**
+ * Registers the service worker and watches for new releases. When a new worker is installed and
+ * waiting, an "Update available" toast appears. "Update now" activates it and reloads; "Later" hides
+ * the toast for this session only — the waiting worker is still there on the next refresh, so it asks again.
+ */
 export function RegisterSW() {
+  const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
+  const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
-    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    if (!("serviceWorker" in navigator) || process.env.NODE_ENV !== "production") return;
+    let reg: ServiceWorkerRegistration | undefined;
+    const onWaiting = (r: ServiceWorkerRegistration) => { if (r.waiting && navigator.serviceWorker.controller) setWaiting(r.waiting); };
+    navigator.serviceWorker.register("/sw.js").then((r) => {
+      reg = r;
+      onWaiting(r);
+      r.addEventListener("updatefound", () => { const nw = r.installing; nw?.addEventListener("statechange", () => { if (nw.state === "installed") onWaiting(r); }); });
+    }).catch(() => undefined);
+    // Check for a new release when the tab comes back and every 15 minutes.
+    const check = () => reg?.update().catch(() => undefined);
+    const onVis = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVis);
+    const t = setInterval(check, 15 * 60_000);
+    // When the new worker takes over, reload once so every tab runs the same release.
+    let reloading = false;
+    const onCtrl = () => { if (reloading) return; reloading = true; location.reload(); };
+    navigator.serviceWorker.addEventListener("controllerchange", onCtrl);
+    return () => { document.removeEventListener("visibilitychange", onVis); clearInterval(t); navigator.serviceWorker.removeEventListener("controllerchange", onCtrl); };
   }, []);
-  return null;
+  if (!waiting || dismissed) return null;
+  return (
+    <div role="status" className="fixed z-[60] left-4 right-4 md:left-auto md:right-6 bottom-24 md:bottom-6 md:w-[380px] rounded-[16px] bg-ink text-white shadow-xl p-4 flex items-center gap-3">
+      <div className="w-9 h-9 rounded-[10px] bg-ink-2 flex items-center justify-center shrink-0"><RefreshCw size={16} className="text-teal" /></div>
+      <div className="flex-1 min-w-0"><div className="text-sm font-semibold">Update available</div><div className="text-[12px] text-muted-3">A new version of HomeFin is ready. Updating takes a second.</div></div>
+      <div className="flex flex-col gap-1.5 shrink-0">
+        <button onClick={() => waiting.postMessage("SKIP_WAITING")} className="h-8 px-3 rounded-[9px] bg-teal text-ink text-xs font-semibold">Update now</button>
+        <button onClick={() => setDismissed(true)} className="h-8 px-3 rounded-[9px] text-xs font-semibold text-muted-3 hover:text-white">Later</button>
+      </div>
+    </div>
+  );
 }
 
 /** "Install app" card: native prompt on Chrome/Edge/Android, step-by-step on iOS and desktop Safari. Hidden once installed. */
