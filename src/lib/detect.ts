@@ -239,3 +239,60 @@ export const receivedInMonth = (data: HomeData, month: string) =>
 
 /** Deposits nobody has decided on yet (not attached to a source, not counted, not ignored). */
 export const unreviewedDeposits = (data: HomeData) => (data.income ?? []).filter((e) => !e.sourceId && !e.status).sort((a, b) => b.date.localeCompare(a.date));
+
+/* ------------------------------------------------------------------ */
+/* Budget recommendations: last quarter's average, reset each quarter  */
+/* ------------------------------------------------------------------ */
+
+export const quarterOf = (d: Date) => `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
+
+/** The three months of the quarter before the one `today` is in. */
+export function previousQuarterMonths(today: Date): string[] {
+  const q = Math.floor(today.getMonth() / 3);
+  const y = q === 0 ? today.getFullYear() - 1 : today.getFullYear();
+  const startM = q === 0 ? 9 : (q - 1) * 3;
+  return [0, 1, 2].map((i) => `${y}-${String(startM + i + 1).padStart(2, "0")}`);
+}
+
+export interface BudgetRecommendation {
+  categoryId: string;
+  current: number;
+  recommended: number;
+  basis: "quarter" | "default" | "none";
+  /** Months in the previous quarter that had any spend in this category. */
+  monthsWithData: number;
+  avg: number;
+  quarter: string;
+}
+
+/**
+ * For each category: average monthly spend (bills + transactions) over the previous quarter.
+ * Only months with recorded activity count toward the average. With no history the category's
+ * `defaultLimit` is recommended; with neither, the current limit stands.
+ */
+export function recommendBudgets(data: HomeData, today = new Date()): BudgetRecommendation[] {
+  const months = previousQuarterMonths(today);
+  const prevQ = quarterOf(new Date(Number(months[0].slice(0, 4)), Number(months[0].slice(5, 7)) - 1, 1));
+  return data.budgets.map((c) => {
+    const perMonth = months.map((m) => {
+      const bills = data.bills.filter((b) => b.category === c.id && data.payments.some((p) => p.billId === b.id && p.month === m)).reduce((s, b) => s + (data.payments.find((p) => p.billId === b.id && p.month === m)?.amount ?? b.amount), 0);
+      const tx = data.transactions.filter((t) => t.category === c.id && t.date.startsWith(m)).reduce((s, t) => s + t.amount, 0);
+      return bills + tx;
+    });
+    const withData = perMonth.filter((v) => v > 0);
+    if (withData.length) {
+      const avg = withData.reduce((s, v) => s + v, 0) / withData.length;
+      // Round to a friendly number: nearest $10 under $500, nearest $25 above.
+      const step = avg < 500 ? 10 : 25;
+      return { categoryId: c.id, current: c.limit, recommended: Math.ceil(avg / step) * step, basis: "quarter", monthsWithData: withData.length, avg, quarter: prevQ };
+    }
+    if (c.defaultLimit) return { categoryId: c.id, current: c.limit, recommended: c.defaultLimit, basis: "default", monthsWithData: 0, avg: 0, quarter: prevQ };
+    return { categoryId: c.id, current: c.limit, recommended: c.limit, basis: "none", monthsWithData: 0, avg: 0, quarter: prevQ };
+  });
+}
+
+/** Apply recommendations to the budgets (all, or a subset of category ids). */
+export function applyRecommendations(data: HomeData, recs: BudgetRecommendation[], only?: string[]): HomeData {
+  const pick = new Set(only ?? recs.map((r) => r.categoryId));
+  return { ...data, budgets: data.budgets.map((c) => { const r = recs.find((x) => x.categoryId === c.id); return r && pick.has(c.id) && r.basis !== "none" ? { ...c, limit: r.recommended } : c; }) };
+}

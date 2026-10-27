@@ -54,6 +54,8 @@ export interface BudgetCategory {
   id: string;
   name: string;
   limit: number; // monthly
+  /** Fallback recommendation when there's no spending history for this category. */
+  defaultLimit?: number;
   /** Maps the category into 50/30/20 and 6 Cans buckets. */
   bucket: "needs" | "wants" | "savings" | "giving" | "education" | "play";
 }
@@ -92,6 +94,10 @@ export interface Settings {
   hiddenAccounts?: string[];
   /** Deposit merchant keys the user said are not income sources. */
   dismissedIncome?: string[];
+  /** When true, budget limits reset to last quarter's averages automatically at each quarter start. */
+  autoApplyBudgetRecommendations?: boolean;
+  /** The quarter (e.g. "2026-Q4") whose recommendations were last applied. */
+  budgetsAppliedForQuarter?: string;
 }
 
 /** A balance reading for an account on a date — Plaid sync appends one each run. Powers debt/net-worth history. */

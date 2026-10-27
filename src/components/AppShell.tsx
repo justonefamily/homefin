@@ -9,6 +9,7 @@ import { SupabaseAdapter } from "@/lib/storage/supabase";
 import { LocalAdapter } from "@/lib/storage/local";
 import { Button, Card, cx } from "./ui";
 import { importJson } from "@/lib/storage/local";
+import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
 
 const NAV = [
   { href: "/", label: "Home", icon: Home },
@@ -22,7 +23,16 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const router = useRouter();
-  const { data, status, adapter, setAdapter, load, onboarded } = useHome();
+  const { data, status, adapter, setAdapter, load, onboarded, update } = useHome();
+  // Quarter rollover: when auto-apply is on and this quarter hasn't been applied yet, reset budgets to last quarter's averages.
+  useEffect(() => {
+    if (!data?.settings.autoApplyBudgetRecommendations) return;
+    const q = quarterOf(new Date());
+    if (data.settings.budgetsAppliedForQuarter === q) return;
+    const recs = recommendBudgets(data, new Date());
+    update((h) => ({ ...applyRecommendations(h, recs), settings: { ...h.settings, budgetsAppliedForQuarter: q } }), `auto-reset budgets for ${q}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.settings.autoApplyBudgetRecommendations, data?.settings.budgetsAppliedForQuarter]);
   const [booted, setBooted] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);

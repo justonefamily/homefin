@@ -199,3 +199,26 @@ describe("income sources: expected vs actual", () => {
     expect(detectIncome(data, new Date(2026, 9, 27))).toHaveLength(0); // known source not re-suggested
   });
 });
+
+describe("budget recommendations", () => {
+  it("averages last quarter and rounds; falls back to default", async () => {
+    const { recommendBudgets, previousQuarterMonths, applyRecommendations } = await import("./detect");
+    expect(previousQuarterMonths(new Date(2026, 9, 27))).toEqual(["2026-07", "2026-08", "2026-09"]);
+    expect(previousQuarterMonths(new Date(2026, 1, 1))).toEqual(["2025-10", "2025-11", "2025-12"]);
+    const h = sampleHome(new Date(2026, 9, 27));
+    const tx = [...h.transactions,
+      { id: "g1", date: "2026-07-05", description: "Publix", amount: 610, category: "groceries" },
+      { id: "g2", date: "2026-08-05", description: "Publix", amount: 690, category: "groceries" },
+      { id: "g3", date: "2026-09-05", description: "Publix", amount: 650, category: "groceries" }];
+    const budgets = h.budgets.map((b) => (b.id === "subs" ? { ...b, defaultLimit: 60 } : b));
+    const data = { ...h, transactions: tx, budgets, payments: h.payments.filter((p) => p.month === "2026-10") };
+    const recs = recommendBudgets(data, new Date(2026, 9, 27));
+    const g = recs.find((r) => r.categoryId === "groceries")!;
+    expect(g.basis).toBe("quarter"); expect(g.monthsWithData).toBe(3); expect(g.recommended).toBe(650); // avg 650 is on the $25 step
+    const subs = recs.find((r) => r.categoryId === "subs")!;
+    expect(subs.basis).toBe("default"); expect(subs.recommended).toBe(60);
+    const applied = applyRecommendations(data, recs, ["groceries"]);
+    expect(applied.budgets.find((b) => b.id === "groceries")!.limit).toBe(650);
+    expect(applied.budgets.find((b) => b.id === "subs")!.limit).toBe(120);
+  });
+});

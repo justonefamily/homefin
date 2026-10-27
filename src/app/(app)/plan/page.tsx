@@ -8,6 +8,8 @@ import { Button, Card, Eyebrow, Field, Modal, ProgressBar, Segmented, SectionTit
 import { STRATEGIES, babySteps, budgetRows, debtsFromAccounts, monthKey, simulatePayoff, splitRows, strategyMeta } from "@/lib/strategies";
 import type { BudgetCategory, StrategyId } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
+import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
+import { Sparkles } from "lucide-react";
 
 const SPLIT_COLORS = ["bg-accent", "bg-amber", "bg-teal", "bg-muted-2", "bg-ink", "bg-gold"];
 const SPLIT_HEX = ["#0e6b74", "#b45309", "#4fb3bc", "#7a8294", "#141821", "#d9a066"];
@@ -176,6 +178,12 @@ function BudgetView({ today }: { today: Date }) {
   const spent = rows.reduce((s, r) => s + r.spent, 0);
   const pace = Math.round((today.getDate() / dim) * 100);
   const [editing, setEditing] = useState<BudgetCategory | "new" | null>(null);
+  const recs = recommendBudgets(data, today);
+  const actionable = recs.filter((r) => r.basis !== "none" && Math.round(r.recommended) !== Math.round(r.current));
+  const thisQ = quarterOf(today);
+  const applyAll = () => update((h) => ({ ...applyRecommendations(h, recs), settings: { ...h.settings, budgetsAppliedForQuarter: thisQ } }), `applied ${recs[0]?.quarter ?? "quarter"} budget recommendations`);
+  const applyOne = (id: string) => update((h) => applyRecommendations(h, recs, [id]), "applied a budget recommendation");
+  const toggleAuto = () => update((h) => ({ ...h, settings: { ...h.settings, autoApplyBudgetRecommendations: !h.settings.autoApplyBudgetRecommendations } }), "toggled auto budget reset");
   const save = (c: BudgetCategory) => update((h) => ({ ...h, budgets: h.budgets.some((x) => x.id === c.id) ? h.budgets.map((x) => (x.id === c.id ? c : x)) : [...h.budgets, c] }), `saved budget ${c.name}`);
   const remove = (id: string) => update((h) => ({ ...h, budgets: h.budgets.filter((b) => b.id !== id) }), "deleted budget category");
   return (
@@ -186,13 +194,29 @@ function BudgetView({ today }: { today: Date }) {
         <Stat label="Remaining" value={money(total - spent)} tone={total - spent < 0 ? "red" : "green"} />
       </div>
       <div className="text-xs text-muted">Day {today.getDate()} of {dim} · you should be at about {pace}% of each budget (the dark marker).</div>
+
+      {recs.length > 0 && (
+        <Card className="p-4 flex flex-col gap-2.5 border-accent-line bg-accent-bg/40">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2"><Sparkles size={16} className="text-accent" /><div className="text-sm font-semibold">Recommended for {thisQ}</div><div className="text-xs text-muted">· based on your {recs[0].quarter} averages</div></div>
+            {actionable.length > 0 && <Button onClick={applyAll} className="h-9 px-3 text-xs">Apply all ({actionable.length})</Button>}
+          </div>
+          <div className="text-[12px] text-muted">Each quarter the recommendation resets to the previous quarter&apos;s average monthly spend per category. Categories with no history use their default limit.{data.settings.budgetsAppliedForQuarter === thisQ ? " Applied for this quarter." : ""}</div>
+          <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!data.settings.autoApplyBudgetRecommendations} onChange={toggleAuto} className="w-4 h-4 accent-[#0e6b74]" /> Reset my budgets to the recommendations automatically at the start of each quarter</label>
+        </Card>
+      )}
       <Card className="md:grid md:grid-cols-2">
         {rows.map((r) => (
           <button key={r.id} onClick={() => setEditing(data.budgets.find((b) => b.id === r.id)!)} className="flex flex-col gap-1.5 px-4 py-3 border-b border-line-soft text-left hover:bg-surface/60 md:[&:nth-child(odd)]:border-r">
             <div className="flex items-baseline justify-between"><div className="text-sm font-semibold">{r.name}</div><div className="text-xs text-muted">{money(r.spent)} of {money(r.limit)}</div></div>
             <ProgressBar pct={r.pct} color={r.state === "over" ? "bg-red" : r.state === "ahead" ? "bg-amber" : "bg-accent"} marker={pace} />
-            <div className={cx("text-[11px] font-semibold", r.state === "over" ? "text-red" : r.state === "ahead" ? "text-amber" : "text-accent")}>
-              {r.state === "over" ? `${money(r.spent - r.limit)} over budget` : r.state === "ahead" ? `ahead of pace — ${money(r.limit - r.spent)} left` : `${money(r.limit - r.spent)} left · on track`}
+            <div className="flex items-center justify-between gap-2">
+              <div className={cx("text-[11px] font-semibold", r.state === "over" ? "text-red" : r.state === "ahead" ? "text-amber" : "text-accent")}>
+                {r.state === "over" ? `${money(r.spent - r.limit)} over budget` : r.state === "ahead" ? `ahead of pace — ${money(r.limit - r.spent)} left` : `${money(r.limit - r.spent)} left · on track`}
+              </div>
+              {(() => { const rc = recs.find((x) => x.categoryId === r.id); if (!rc || rc.basis === "none" || Math.round(rc.recommended) === Math.round(rc.current)) return null; return (
+                <span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); applyOne(r.id); }} onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); applyOne(r.id); } }} className="text-[11px] font-semibold text-accent bg-accent-bg border border-accent-line rounded-[8px] px-2 py-0.5 hover:bg-accent-soft">{rc.basis === "quarter" ? `avg ${money(rc.avg)} → set ${money(rc.recommended)}` : `default ${money(rc.recommended)}`}</span>
+              ); })()}
             </div>
           </button>
         ))}
@@ -207,10 +231,14 @@ function CategoryForm({ cat, onClose, onSave, onDelete }: { cat?: BudgetCategory
   const [name, setName] = useState(cat?.name ?? "");
   const [limit, setLimit] = useState(cat?.limit ?? 0);
   const [bucket, setBucket] = useState<BudgetCategory["bucket"]>(cat?.bucket ?? "needs");
+  const [defaultLimit, setDefaultLimit] = useState(cat?.defaultLimit ?? 0);
   return (
     <Modal open onClose={onClose} title={cat ? "Edit category" : "Add a budget category"}>
       <Field label="Name"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Groceries" /></Field>
-      <Field label="Monthly limit ($)"><input className={inputCls} type="number" inputMode="decimal" value={limit || ""} onChange={(e) => setLimit(Number(e.target.value))} /></Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Monthly limit ($)"><input className={inputCls} type="number" inputMode="decimal" value={limit || ""} onChange={(e) => setLimit(Number(e.target.value))} /></Field>
+        <Field label="Default ($)" hint="Used as the recommendation when there's no spending history."><input className={inputCls} type="number" inputMode="decimal" value={defaultLimit || ""} onChange={(e) => setDefaultLimit(Number(e.target.value))} /></Field>
+      </div>
       <Field label="Counts toward" hint="Used by 50/30/20 and 6 Cans to sort this category into a bucket.">
         <select className={selectCls} value={bucket} onChange={(e) => setBucket(e.target.value as BudgetCategory["bucket"])}>
           <option value="needs">Needs / necessities</option><option value="wants">Wants</option><option value="play">Play</option><option value="education">Education</option><option value="savings">Savings & debt</option><option value="giving">Giving / tithe</option>
@@ -218,7 +246,7 @@ function CategoryForm({ cat, onClose, onSave, onDelete }: { cat?: BudgetCategory
       </Field>
       <div className="flex gap-2 pt-1">
         {cat && <Button variant="danger" onClick={() => { onDelete(cat.id); onClose(); }}>Delete</Button>}
-        <Button className="flex-1" disabled={!name} onClick={() => { onSave({ id: cat?.id ?? uid(), name, limit, bucket }); onClose(); }}>Save</Button>
+        <Button className="flex-1" disabled={!name} onClick={() => { onSave({ id: cat?.id ?? uid(), name, limit, bucket, defaultLimit: defaultLimit || undefined }); onClose(); }}>Save</Button>
       </div>
     </Modal>
   );
