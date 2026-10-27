@@ -188,7 +188,7 @@ export function budgetRows(data: HomeData, month: string, dayOfMonth: number, da
     const tx = data.transactions.filter((t) => t.category === c.id && t.date.startsWith(month)).reduce((s, t) => s + t.amount, 0);
     const spent = bills + tx;
     const ratio = c.limit ? spent / c.limit : 0;
-    return { id: c.id, name: c.name, limit: c.limit, spent, pct: Math.min(100, Math.round(ratio * 100)), state: spent > c.limit ? "over" : ratio > pace ? "ahead" : "ok" };
+    return { id: c.id, name: c.name, limit: c.limit, spent, pct: Math.min(100, Math.round(ratio * 100)), state: spent > c.limit ? "over" : spent < c.limit && ratio > pace + 0.03 ? "ahead" : "ok" };
   });
 }
 

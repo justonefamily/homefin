@@ -99,6 +99,8 @@ export interface HomeData {
   transactions: Transaction[];
   balanceHistory?: BalancePoint[];
   income?: IncomeEvent[];
+  /** The Focus board: widgets the household composed. See lib/widgets.ts. */
+  dashboard?: { widgets: import("./widgets").Widget[] };
 }
 
 export interface Snapshot {

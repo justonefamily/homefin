@@ -1,5 +1,8 @@
 "use client";
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { FocusBoard } from "@/components/FocusBoard";
+import { Segmented } from "@/components/ui";
 import Link from "next/link";
 import { getDaysInMonth } from "date-fns";
 import { useHome } from "@/store/useHome";
@@ -13,6 +16,8 @@ import { CreditCard, BarChart3, CalendarDays } from "lucide-react";
 export default function HomePage() {
   const data = useHome((s) => s.data)!;
   const today = useToday();
+  const params = useSearchParams();
+  const [tab, setTab] = useState<"today" | "focus">(params.get("view") === "focus" ? "focus" : "today");
   const [period, setPeriod] = useState(() => currentPeriod(today, data.pay.splitDay));
   const dim = getDaysInMonth(today);
 
@@ -36,6 +41,10 @@ export default function HomePage() {
         </div>
         <div className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center text-sm font-semibold">{initials}</div>
       </div>
+      <div className="md:max-w-xs"><Segmented value={tab} onChange={setTab} options={[{ id: "today", label: "Today" }, { id: "focus", label: "Focus board" }]} /></div>
+
+      {tab === "focus" && <FocusBoard today={today} />}
+      {tab === "today" && (<>
 
       <div className="md:grid md:grid-cols-12 md:gap-6 flex flex-col gap-4">
         <div className="md:col-span-5 flex flex-col gap-4">
@@ -94,6 +103,7 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+      </>)}
     </>
   );
 }

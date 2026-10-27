@@ -6,7 +6,7 @@ Bills, budget and debt payoff for your home. Mobile-first PWA (Next.js 16 · Typ
 
 | Area | What it does |
 | --- | --- |
-| **Home** | Pay-period view (1st–15th / 16th–end), left to pay, week-by-week ending balance, bills due, current plan |
+| **Home** | **Today**: pay-period view (1st–15th / 16th–end), left to pay, week-by-week ending balance, bills due, current plan · **Focus board**: your own widget grid — number cards, gauges, bar charts, donuts, lists — each pointed at any metric in `src/lib/widgets.ts` (22 numbers, 12 series), sized 1–3 columns on desktop, stacked on mobile, saved with the home |
 | **Bills** | Month calendar + tap-to-pay list · **Weeks** forward cash-flow · **Year** actual vs. projected per month |
 | **Plan** | Strategy dropdown — Debt Snowball, Avalanche, Ramsey Baby Steps (7-step chart), 50/30/20, 6 Cans (50/10/10/10/10/10) — all computed from the same data · payoff timeline + balance curve · **Budget** tab with pace marker |
 | **Insights** | This time vs. last year (income, bills, spending, debt) and a *Make your own comparison* widget (metric × period type × any two periods) |
