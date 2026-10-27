@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Script from "next/script";
 import { RefreshCw } from "lucide-react";
 import { useHome } from "@/store/useHome";
-import { Button, Card, Eyebrow, Field, Mark, Modal, Row, cx, fmt, inputCls, money, selectCls } from "@/components/ui";
+import { Button, Card, Eyebrow, Field, Mark, Modal, cx, inputCls, money, selectCls } from "@/components/ui";
 import type { Account, AccountKind } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
 
@@ -29,6 +29,8 @@ export default function AccountsPage() {
   const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const plaidEnabled = adapter.kind === "supabase";
+  const historyDays = data.settings.historyDays ?? 730;
+  const setHistory = (n: number) => update((h) => ({ ...h, settings: { ...h.settings, historyDays: n } }), "changed history depth");
   const live = data.accounts.filter((a) => a.source === "plaid").length;
 
   const save = (a: Account) => update((h) => ({ ...h, accounts: h.accounts.some((x) => x.id === a.id) ? h.accounts.map((x) => (x.id === a.id ? a : x)) : [...h.accounts, a] }), `saved account ${a.name}`);
@@ -52,7 +54,7 @@ export default function AccountsPage() {
   const connect = useCallback(async () => {
     setMsg(null);
     try {
-      const r = await fetch("/api/plaid/create-link-token", { method: "POST" });
+      const r = await fetch("/api/plaid/create-link-token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days: historyDays }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Could not start Plaid");
       if (!window.Plaid) throw new Error("Plaid Link is still loading — try again in a second.");
@@ -65,7 +67,7 @@ export default function AccountsPage() {
         },
       }).open();
     } catch (e) { setMsg((e as Error).message); }
-  }, [sync]);
+  }, [sync, historyDays]);
 
   useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), 15000); return () => clearTimeout(t); } }, [msg]);
 
@@ -89,7 +91,19 @@ export default function AccountsPage() {
         </div>
       </Card>
       {msg && <Card className="p-3 text-xs text-ink">{msg}</Card>}
-      {plaidEnabled && <Button variant="dashed" onClick={connect}>Connect a bank, card or loan (Plaid)</Button>}
+      {plaidEnabled && (
+        <Card className="p-4 flex flex-col gap-3">
+          <div className="flex flex-col md:flex-row md:items-end gap-3">
+            <Field label="Pull history going back">
+              <select className={selectCls} value={historyDays} onChange={(e) => setHistory(Number(e.target.value))}>
+                <option value={90}>3 months</option><option value={180}>6 months</option><option value={365}>1 year</option><option value={730}>2 years (maximum)</option>
+              </select>
+            </Field>
+            <Button onClick={connect} className="md:h-11 md:self-end">Connect a bank, card or loan (Plaid)</Button>
+          </div>
+          <div className="text-[11px] text-muted leading-relaxed">Plaid provides up to 24 months of transactions, so 2 years is the hard limit. The depth is fixed when a bank is linked — to pull deeper history for an already-linked bank, remove it and connect it again.</div>
+        </Card>
+      )}
 
       <div className="md:grid md:grid-cols-2 md:gap-6 flex flex-col gap-4">
         {GROUPS.map((g) => {
@@ -99,11 +113,7 @@ export default function AccountsPage() {
             <div key={g.title} className="flex flex-col gap-2">
               <Eyebrow className="pt-1.5">{g.title}</Eyebrow>
               <Card>
-                {items.map((a) => (
-                  <Row key={a.id} onClick={() => setEditing(a)} left={<Mark>{a.institution.replace(/[^A-Za-z0-9& ]/g, "").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}</Mark>}
-                    title={a.name} sub={[a.mask ? `••${a.mask}` : null, a.apr ? `${a.apr}% APR` : null, a.minPayment ? `min $${fmt(a.minPayment)}` : null, a.kind === "biller" ? "bill" : null].filter(Boolean).join(" · ") || a.institution}
-                    right={a.kind === "credit-score" ? String(a.balance) : money(a.balance)} rightSub={<span className="flex items-center gap-1"><i className={cx("w-1.5 h-1.5 rounded-full inline-block", a.source === "plaid" ? "bg-green" : "bg-field")} />{a.source === "plaid" ? ago(a.lastSyncedAt) : a.source}</span>} rightTone={a.source === "plaid" ? "text-green" : "text-muted"} />
-                ))}
+                {items.map((a) => <AccountRow key={a.id} a={a} onClick={() => setEditing(a)} />)}
               </Card>
             </div>
           );
@@ -113,6 +123,40 @@ export default function AccountsPage() {
 
       {editing && <AccountForm acct={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={save} onDelete={remove} />}
     </>
+  );
+}
+
+const initials = (s: string) => s.replace(/[^A-Za-z0-9& ]/g, "").split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "•";
+const KIND_LABEL: Record<AccountKind, string> = { checking: "Checking", savings: "Savings", credit: "Credit card", loan: "Loan", mortgage: "Mortgage", biller: "Bill", "credit-score": "Credit score" };
+
+/** Institution · product name, then the numbers that matter as callouts. */
+function AccountRow({ a, onClick }: { a: Account; onClick: () => void }) {
+  const isDebt = a.kind === "credit" || a.kind === "loan" || a.kind === "mortgage";
+  const sameName = a.name.toLowerCase().includes(a.institution.toLowerCase());
+  const callouts: { label: string; value: string; tone?: string }[] = [];
+  if (a.kind === "credit-score") callouts.push({ label: "Score", value: String(a.balance) });
+  else callouts.push({ label: isDebt ? "Balance owed" : a.kind === "biller" ? "Typical bill" : "Balance", value: money(a.balance), tone: isDebt && a.balance > 0 ? "text-red" : undefined });
+  if (a.apr !== undefined && a.apr > 0) callouts.push({ label: "APR", value: `${a.apr}%` });
+  if (a.minPayment) callouts.push({ label: "Minimum", value: money(a.minPayment) });
+  if (a.mask) callouts.push({ label: "Ending", value: `••${a.mask}` });
+  return (
+    <button onClick={onClick} className="flex items-start gap-3 px-4 py-3 border-b border-line-soft last:border-b-0 w-full text-left hover:bg-surface/60">
+      <Mark>{initials(a.institution)}</Mark>
+      <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold truncate">{sameName ? a.name : <>{a.institution} <span className="text-muted font-normal">·</span> {a.name}</>}</div>
+            <div className="text-[11px] text-muted">{KIND_LABEL[a.kind]}</div>
+          </div>
+          <div className={cx("text-[11px] font-semibold shrink-0 flex items-center gap-1 pt-0.5", a.source === "plaid" ? "text-green" : "text-muted")}><i className={cx("w-1.5 h-1.5 rounded-full inline-block", a.source === "plaid" ? "bg-green" : "bg-field")} />{a.source === "plaid" ? ago(a.lastSyncedAt) : a.source}</div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {callouts.map((c) => (
+            <div key={c.label} className="flex items-baseline gap-1 rounded-[8px] bg-surface border border-line-soft px-2 py-1"><span className="text-[10px] text-muted">{c.label}</span><span className={cx("text-xs font-semibold", c.tone)}>{c.value}</span></div>
+          ))}
+        </div>
+      </div>
+    </button>
   );
 }
 

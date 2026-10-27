@@ -16,6 +16,14 @@ export const plaid = () =>
     baseOptions: { headers: { "PLAID-CLIENT-ID": process.env.PLAID_CLIENT_ID!, "PLAID-SECRET": process.env.PLAID_SECRET! } },
   }));
 
+/** Strip control/replacement characters and bank-export noise so names read cleanly in the UI. */
+export const cleanName = (s: string | null | undefined) =>
+  (s ?? "")
+    .replace(/[\u0000-\u001f\u007f-\u009f\ufffd?]+/g, " ")
+    .replace(/[^\p{L}\p{N}\p{P}\p{Zs}$&]/gu, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
 const kindOf = (a: AccountBase): AccountKind => {
   if (a.type === "depository") return a.subtype === "savings" ? "savings" : "checking";
   if (a.type === "credit") return "credit";
@@ -33,7 +41,7 @@ export function mergeAccounts(home: HomeData, itemId: string, institution: strin
     const balance = kind === "checking" || kind === "savings" ? a.balances.current ?? 0 : a.balances.current ?? 0;
     const existing = next.find((x) => x.id === a.account_id);
     const merged: Account = {
-      ...(existing ?? { id: a.account_id, source: "plaid" as const, name: a.official_name ?? a.name, institution, kind }),
+      ...(existing ?? { id: a.account_id, source: "plaid" as const, name: cleanName(a.official_name) || cleanName(a.name) || "Account", institution: cleanName(institution) || "Bank", kind }),
       balance, mask: a.mask ?? existing?.mask, plaidItemId: itemId, lastSyncedAt: now.toISOString(),
       apr: existing?.apr, minPayment: existing?.minPayment,
     };
@@ -59,7 +67,7 @@ export function mergeTransactions(home: HomeData, added: PlaidTx[], removed: str
   const existing = new Set(home.transactions.map((t) => t.id));
   const fresh: Transaction[] = added
     .filter((t) => !existing.has(t.transaction_id) && t.amount > 0 && !t.pending)
-    .map((t) => ({ id: t.transaction_id, accountId: t.account_id, date: t.date, description: t.merchant_name ?? t.name, amount: t.amount, category: catFor(t) }));
+    .map((t) => ({ id: t.transaction_id, accountId: t.account_id, date: t.date, description: cleanName(t.merchant_name) || cleanName(t.name) || "Transaction", amount: t.amount, category: catFor(t) }));
   const income = (home.income ?? []).slice();
   for (const t of added) if (t.amount < 0 && !t.pending && !income.some((i) => i.id === t.transaction_id) && (t.personal_finance_category?.primary === "INCOME")) income.push({ id: t.transaction_id, date: t.date, amount: -t.amount, source: t.merchant_name ?? t.name });
   return { home: { ...home, transactions: [...home.transactions.filter((t) => !removedSet.has(t.id)), ...fresh], income }, added: fresh.length };

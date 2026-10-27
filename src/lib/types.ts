@@ -79,6 +79,8 @@ export interface Settings {
   emergencyMonths: number; // Baby Step 3
   /** Monthly estimate of everyday spending (groceries, gas, etc.) used in projections. */
   everydaySpend: number;
+  /** How far back to pull transactions when linking a bank (days). Plaid's maximum is 730 (24 months). */
+  historyDays?: number;
 }
 
 /** A balance reading for an account on a date — Plaid sync appends one each run. Powers debt/net-worth history. */
