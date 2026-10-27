@@ -162,3 +162,17 @@ describe("income detection", () => {
     expect(s[0].monthly).toBe(3250);
   });
 });
+
+describe("period options respect data range", () => {
+  it("stops at the earliest month with data", async () => {
+    const { periodOptions, earliestDataMonth } = await import("./insights");
+    const h = sampleHome(new Date(2026, 9, 27));
+    expect(earliestDataMonth(h)).toBe("2025-10");
+    const months = periodOptions("month", new Date(2026, 9, 27), earliestDataMonth(h));
+    expect(months[0].key).toBe("2026-10");
+    expect(months[months.length - 1].key).toBe("2025-10");
+    expect(months).toHaveLength(13);
+    expect(periodOptions("year", new Date(2026, 9, 27), "2025-10").map((o) => o.key)).toEqual(["2026", "2025"]);
+    expect(periodOptions("month", new Date(2026, 9, 27), null)).toHaveLength(1);
+  });
+});

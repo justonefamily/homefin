@@ -111,15 +111,40 @@ export function compare(data: HomeData, metric: MetricId, a: PeriodRef, b: Perio
   return { metric, a, b, rows: rows.filter((r) => r.a || r.b), totalA, totalB, bEmpty: !hasAny(mB) };
 }
 
-/** Period options for the pickers, going back `years` years from `today`. */
-export function periodOptions(g: Granularity, today: Date, years = 2): PeriodRef[] {
+/** Earliest month (YYYY-MM) with any recorded data, or null when the home has none. */
+export function earliestDataMonth(data: HomeData): string | null {
+  const dates: string[] = [
+    ...data.transactions.map((t) => t.date.slice(0, 7)),
+    ...data.payments.map((p) => p.month),
+    ...(data.income ?? []).map((i) => i.date.slice(0, 7)),
+    ...(data.balanceHistory ?? []).map((b) => b.date.slice(0, 7)),
+  ];
+  return dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : null;
+}
+
+/**
+ * Period options for the pickers: from `today` back to the earliest month that has data
+ * (never further — a bank link only brings up to 24 months). With no data, just the current period.
+ */
+export function periodOptions(g: Granularity, today: Date, earliest: string | null): PeriodRef[] {
   const out: PeriodRef[] = [];
-  const y0 = today.getFullYear();
-  if (g === "year") for (let y = y0; y > y0 - years - 1; y--) out.push({ granularity: g, key: String(y) });
+  const y0 = today.getFullYear(), m0 = today.getMonth() + 1;
+  const floor = earliest ?? `${y0}-${String(m0).padStart(2, "0")}`;
+  const [fy, fm] = floor.split("-").map(Number);
+  if (g === "year") for (let y = y0; y >= fy; y--) out.push({ granularity: g, key: String(y) });
   else if (g === "quarter") {
-    for (let y = y0; y > y0 - years - 1; y--) for (let q = 4; q >= 1; q--) { if (y === y0 && q > Math.floor(today.getMonth() / 3) + 1) continue; out.push({ granularity: g, key: `${y}-Q${q}` }); }
+    const fq = Math.floor((fm - 1) / 3) + 1;
+    for (let y = y0; y >= fy; y--) for (let q = 4; q >= 1; q--) {
+      if (y === y0 && q > Math.floor((m0 - 1) / 3) + 1) continue;
+      if (y === fy && q < fq) continue;
+      out.push({ granularity: g, key: `${y}-Q${q}` });
+    }
   } else {
-    for (let y = y0; y > y0 - years - 1; y--) for (let m = 12; m >= 1; m--) { if (y === y0 && m > today.getMonth() + 1) continue; out.push({ granularity: g, key: `${y}-${String(m).padStart(2, "0")}` }); }
+    for (let y = y0; y >= fy; y--) for (let m = 12; m >= 1; m--) {
+      if (y === y0 && m > m0) continue;
+      if (y === fy && m < fm) continue;
+      out.push({ granularity: g, key: `${y}-${String(m).padStart(2, "0")}` });
+    }
   }
   return out;
 }

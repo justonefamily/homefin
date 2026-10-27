@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useHome } from "@/store/useHome";
 import { useToday } from "@/components/hooks";
 import { Card, Eyebrow, Field, Segmented, Stat, cx, money, selectCls } from "@/components/ui";
-import { METRICS, compare, periodFor, periodLabel, periodOptions, sameTimeLastYear, type Granularity, type MetricId, type PeriodRef } from "@/lib/insights";
+import { METRICS, compare, earliestDataMonth, periodFor, periodLabel, periodOptions, sameTimeLastYear, type Granularity, type MetricId, type PeriodRef } from "@/lib/insights";
 
 export default function InsightsPage() {
   const data = useHome((s) => s.data)!;
@@ -78,20 +78,21 @@ function CustomComparison({ today }: { today: Date }) {
   const data = useHome((s) => s.data)!;
   const [metric, setMetric] = useState<MetricId>("spending");
   const [g, setG] = useState<Granularity>("month");
-  const options = useMemo(() => periodOptions(g, today, 3), [g, today]);
+  const earliest = useMemo(() => earliestDataMonth(data), [data]);
+  const options = useMemo(() => periodOptions(g, today, earliest), [g, today, earliest]);
   const [aKey, setAKey] = useState(options[0].key);
-  const [bKey, setBKey] = useState(sameTimeLastYear({ granularity: g, key: options[0].key }).key);
+  const [bKey, setBKey] = useState(() => { const ly = sameTimeLastYear({ granularity: g, key: options[0].key }).key; return options.some((o) => o.key === ly) ? ly : (options[1] ?? options[0]).key; });
   const a: PeriodRef = { granularity: g, key: options.some((o) => o.key === aKey) ? aKey : options[0].key };
   const b: PeriodRef = { granularity: g, key: options.some((o) => o.key === bKey) ? bKey : (options[1] ?? options[0]).key };
   const c = compare(data, metric, a, b);
   const diff = c.totalA - c.totalB;
   return (
     <section className="flex flex-col gap-3">
-      <div><h2 className="text-base font-semibold">Make your own comparison</h2><div className="text-xs text-muted">Pick any metric and any two periods from your data.</div></div>
+      <div><h2 className="text-base font-semibold">Make your own comparison</h2><div className="text-xs text-muted">Pick any metric and any two periods. The lists only go back as far as your data does{earliest ? ` (${new Date(Number(earliest.slice(0, 4)), Number(earliest.slice(5, 7)) - 1, 1).toLocaleString("en-US", { month: "short", year: "numeric" })})` : ""}.</div></div>
       <Card className="p-4 flex flex-col gap-3">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <Field label="Metric"><select className={selectCls} value={metric} onChange={(e) => setMetric(e.target.value as MetricId)}>{METRICS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
-          <Field label="Period type"><select className={selectCls} value={g} onChange={(e) => { const ng = e.target.value as Granularity; setG(ng); const o = periodOptions(ng, today, 3); setAKey(o[0].key); setBKey(sameTimeLastYear(o[0]).key); }}><option value="month">Month</option><option value="quarter">Quarter</option><option value="year">Year</option></select></Field>
+          <Field label="Period type"><select className={selectCls} value={g} onChange={(e) => { const ng = e.target.value as Granularity; setG(ng); const o = periodOptions(ng, today, earliest); setAKey(o[0].key); const ly = sameTimeLastYear(o[0]).key; setBKey(o.some((x) => x.key === ly) ? ly : (o[1] ?? o[0]).key); }}><option value="month">Month</option><option value="quarter">Quarter</option><option value="year">Year</option></select></Field>
           <Field label="Compare"><select className={selectCls} value={a.key} onChange={(e) => setAKey(e.target.value)}>{options.map((o) => <option key={o.key} value={o.key}>{periodLabel(o)}</option>)}</select></Field>
           <Field label="Against"><select className={selectCls} value={b.key} onChange={(e) => setBKey(e.target.value)}>{options.map((o) => <option key={o.key} value={o.key}>{periodLabel(o)}</option>)}</select></Field>
         </div>
