@@ -22,7 +22,7 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const router = useRouter();
-  const { data, status, adapter, setAdapter, load } = useHome();
+  const { data, status, adapter, setAdapter, load, onboarded } = useHome();
   const [booted, setBooted] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
 
@@ -53,7 +53,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return <div className="flex-1 flex items-center justify-center text-muted gap-2 text-sm"><Loader2 className="animate-spin" size={18} /> Loading your home…</div>;
   }
 
-  if (!data || (data.bills.length === 0 && data.accounts.length === 0 && data.pay.monthlyIncome === 0)) {
+  if (!data || !onboarded) {
     return <Onboarding reload={load} />;
   }
 
@@ -110,8 +110,8 @@ export function SaveStatus() {
 }
 
 function Onboarding({ reload }: { reload: () => Promise<void> }) {
-  const { loadSample, startFresh, replace, adapter } = useHome();
-  const [name, setName] = useState("My home");
+  const { loadSample, startFresh, replace, adapter, data, status, error } = useHome();
+  const [name, setName] = useState(data?.homeName && data.homeName !== "My home" ? data.homeName : "My home");
   return (
     <div className="flex-1 flex items-center justify-center p-6">
       <div className="w-full max-w-md flex flex-col gap-4">
@@ -122,7 +122,8 @@ function Onboarding({ reload }: { reload: () => Promise<void> }) {
         <Card className="p-5 flex flex-col gap-3">
           <div className="text-sm font-semibold">Start a new home</div>
           <input value={name} onChange={(e) => setName(e.target.value)} className="h-11 rounded-[12px] border border-chip px-3 text-sm" aria-label="Home name" />
-          <Button onClick={() => startFresh(name)}>Create “{name}”</Button>
+          <Button onClick={() => startFresh(name)} disabled={status === "saving"}>{status === "saving" ? "Creating…" : `Create “${name}”`}</Button>
+          {status === "error" && <div className="text-xs text-red">Couldn&apos;t save: {error}</div>}
         </Card>
         <Card className="p-5 flex flex-col gap-3">
           <div className="text-sm font-semibold">Or bring your own data</div>

@@ -101,6 +101,8 @@ export interface HomeData {
   income?: IncomeEvent[];
   /** The Focus board: widgets the household composed. See lib/widgets.ts. */
   dashboard?: { widgets: import("./widgets").Widget[] };
+  /** True once the welcome screen has been completed, so an empty-but-created home opens straight into the app. */
+  setupDone?: boolean;
 }
 
 export interface Snapshot {

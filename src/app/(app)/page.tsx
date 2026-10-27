@@ -45,6 +45,18 @@ export default function HomePage() {
 
       {tab === "focus" && <FocusBoard today={today} />}
       {tab === "today" && (<>
+      {(data.pay.monthlyIncome === 0 || data.bills.length === 0 || data.budgets.length === 0) && (
+        <Card className="p-4 flex flex-col gap-3">
+          <div className="text-[15px] font-semibold">Set up {data.homeName}</div>
+          <div className="text-[13px] text-muted">Three things make everything else light up:</div>
+          <div className="flex flex-col gap-2">
+            <SetupRow done={data.pay.monthlyIncome > 0} href="/settings" label="Enter your take-home pay and paydays" sub="Settings → Pay schedule" />
+            <SetupRow done={data.bills.length > 0} href="/bills" label="Add your bills with due days" sub="Bills → + Add a bill (or connect a biller later)" />
+            <SetupRow done={data.budgets.length > 0} href="/plan?view=budget" label="Create budget categories" sub="Plan → Budget → + Add a budget category" />
+            <SetupRow done={data.accounts.length > 0} href="/accounts" label="Connect or add your accounts" sub="Accounts → Connect a bank (Plaid) or + Add" optional />
+          </div>
+        </Card>
+      )}
 
       <div className="md:grid md:grid-cols-12 md:gap-6 flex flex-col gap-4">
         <div className="md:col-span-5 flex flex-col gap-4">
@@ -107,6 +119,14 @@ export default function HomePage() {
     </>
   );
 }
+
+const SetupRow = ({ done, href, label, sub, optional }: { done: boolean; href: string; label: string; sub: string; optional?: boolean }) => (
+  <Link href={href} className={cx("flex items-center gap-3 rounded-[12px] border px-3 py-2.5 hover:border-field", done ? "border-line-soft bg-surface/60" : "border-line bg-card")}>
+    <div className={cx("w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0", done ? "bg-green border-green" : "border-field")}>{done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg>}</div>
+    <div className="flex-1 min-w-0"><div className={cx("text-[13px] font-semibold", done && "line-through text-muted")}>{label}{optional && !done && <span className="text-muted font-normal"> (optional)</span>}</div><div className="text-[11px] text-muted">{sub}</div></div>
+    <div className="text-xs text-muted">›</div>
+  </Link>
+);
 
 const Quick = ({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) => (
   <Link href={href} className="h-[72px] rounded-[14px] border border-line bg-card flex flex-col items-center justify-center gap-1.5 text-xs font-semibold hover:border-field">{icon}{label}</Link>

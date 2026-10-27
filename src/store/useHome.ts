@@ -11,6 +11,8 @@ interface HomeStore {
   data: HomeData | null;
   snapshots: Snapshot[];
   status: "idle" | "loading" | "saving" | "error";
+  /** Set once the user has gone through the welcome screen in this session (or the home has real data). */
+  onboarded: boolean;
   error?: string;
   savedAt?: string;
   restoredNote?: string;
@@ -32,6 +34,7 @@ export const useHome = create<HomeStore>((set, get) => ({
   data: null,
   snapshots: [],
   status: "idle",
+  onboarded: false,
 
   async setAdapter(adapter) {
     set({ adapter, data: null });
@@ -42,7 +45,8 @@ export const useHome = create<HomeStore>((set, get) => ({
     set({ status: "loading", error: undefined });
     try {
       const data = await get().adapter.load();
-      set({ data, status: "idle" });
+      const hasContent = !!data && (data.setupDone === true || data.bills.length > 0 || data.accounts.length > 0 || data.pay.monthlyIncome > 0);
+      set({ data, status: "idle", onboarded: get().onboarded || hasContent });
       await get().refreshSnapshots();
     } catch (e) {
       set({ status: "error", error: (e as Error).message });
@@ -70,8 +74,9 @@ export const useHome = create<HomeStore>((set, get) => ({
     });
   },
 
-  async replace(d, note = "import") {
-    set({ data: d, status: "saving" });
+  async replace(d0, note = "import") {
+    const d = { ...d0, setupDone: true };
+    set({ data: d, status: "saving", onboarded: true });
     try {
       await get().adapter.save(d, note);
       set({ status: "idle", savedAt: new Date().toISOString() });
