@@ -54,6 +54,8 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const [moving, setMoving] = useState<string | null>(null); // transaction id being moved
   const [moveQuery, setMoveQuery] = useState("");
   const nature = rawNames[0] ? parseNature(rawNames[0]) : null;
+  const liabilities = data.accounts.filter((a) => a.kind === "credit" || a.kind === "loan" || a.kind === "mortgage").sort((a, b) => `${a.institution} ${a.name}`.localeCompare(`${b.institution} ${b.name}`));
+  const paysDown = pref.paysDownAccountId ? data.accounts.find((a) => a.id === pref.paysDownAccountId) : undefined;
   // "On your statement": every distinct wording, as a checklist. Unchecked ones get split out into their own merchant on Save.
   const wordings = useMemo(() => { const m = new Map<string, { count: number; total: number; last: string }>(); for (const t of txs) { const e = m.get(t.description) ?? { count: 0, total: 0, last: t.date }; e.count++; e.total += t.amount; if (t.date > e.last) e.last = t.date; m.set(t.description, e); } return [...m.entries()].map(([desc, v]) => ({ desc, ...v })).sort((a, b) => b.count - a.count || b.total - a.total); }, [txs]);
   const [showWordings, setShowWordings] = useState(false);
@@ -143,7 +145,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
           )}
         </div>
       )}
-      <div className={cx("rounded-[12px] px-3 py-2 text-[12px] font-semibold", bill ? "bg-accent-bg text-accent" : dismissed ? "bg-surface text-muted" : suggestion ? "bg-amber-bg text-amber" : "bg-surface text-ink")}>{status}{nature && nature.nature !== "other" && nature.nature !== "card" && <span className="font-normal text-muted"> · reads as {nature.label.toLowerCase()}</span>}</div>
+      <div className={cx("rounded-[12px] px-3 py-2 text-[12px] font-semibold", bill ? "bg-accent-bg text-accent" : dismissed ? "bg-surface text-muted" : suggestion ? "bg-amber-bg text-amber" : "bg-surface text-ink")}>{status}{nature && nature.nature !== "other" && nature.nature !== "card" && <span className="font-normal text-muted"> · reads as {nature.label.toLowerCase()}</span>}{paysDown && <span className="font-normal text-muted"> · pays down <b className="text-ink">{paysDown.institution} · {paysDown.name}</b></span>}</div>
       {me && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-3">
           <Fact label="Total">{money(me.total)}</Fact>
@@ -225,6 +227,14 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
         {pref.kind && pref.kind !== "spend" && <Button variant="secondary" onClick={() => setKind("spend")} className="h-10 px-3 text-xs"><Undo2 size={13} className="inline -mt-0.5 mr-1" />Count as spending again</Button>}
       </div>
       {bill && <div className="text-[11px] text-muted">Amount, due day and autopay for this bill are edited on the Bills page.</div>}
+      {liabilities.length > 0 && (
+        <Field label="Pays down a loan or card" hint="Money out, but it brings a balance down. Pick which one; the Accounts page and the Planner will count it.">
+          <select className={selectCls} value={pref.paysDownAccountId ?? ""} onChange={(e) => update((h) => { const id = e.target.value || undefined; let next = setMerchantPref(h, key, { paysDownAccountId: id, kind: id && prefFor(h, key).kind === "transfer" ? "spend" : prefFor(h, key).kind }); if (bill && id) next = { ...next, bills: next.bills.map((b) => (b.id === bill.id ? { ...b, accountId: id } : b)) }; return next; }, `${displayName}: pays down ${data.accounts.find((a) => a.id === e.target.value)?.name ?? "nothing"}`)}>
+            <option value="">Not a loan payment</option>
+            {liabilities.map((a) => <option key={a.id} value={a.id}>{a.institution} · {a.name}{a.balance ? ` · ${money(a.balance)} owed` : ""}</option>)}
+          </select>
+        </Field>
+      )}
       <Field label="Merge into another merchant" hint="Same place under two names? Pick the one to keep.">
         <div className="relative"><Search size={14} className="absolute left-3 top-3.5 text-muted" /><input className={cx(inputCls, "pl-9")} placeholder="Search merchants…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
         {(query || mergeInto) && <div className="flex flex-col gap-1 mt-2 max-h-40 overflow-y-auto">

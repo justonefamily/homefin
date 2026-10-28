@@ -86,6 +86,8 @@ export interface MerchantPref {
   kind?: "spend" | "transfer" | "ignore";
   /** Budget category override for every transaction at this merchant. */
   category?: string;
+  /** This payment brings down a tracked loan or card (an Account of kind credit/loan/mortgage). Money out, but toward a balance. */
+  paysDownAccountId?: string;
 }
 
 export interface PaySchedule {

@@ -40,6 +40,20 @@ export function classify(data: HomeData, t: Transaction, billKeys: Map<string, B
   return { kind: "spend", key };
 }
 
+/** Money paid toward a tracked loan/card (merchants marked "pays down"), optionally within a date range. */
+export function debtPaymentsFor(data: HomeData, accountId: string, from?: string, to?: string): { total: number; count: number; last?: string } {
+  const bills = billKeyMap(data);
+  let total = 0, count = 0, last: string | undefined;
+  for (const t of data.transactions) {
+    if (t.amount <= 0 || (from && t.date < from) || (to && t.date > to)) continue;
+    const c = classify(data, t, bills);
+    if (c.kind === "ignore") continue;
+    if (prefFor(data, c.key).paysDownAccountId !== accountId) continue;
+    total += t.amount; count++; if (!last || t.date > last) last = t.date;
+  }
+  return { total, count, last };
+}
+
 /** Split every transaction with this exact statement wording out of `fromKey` into its own merchant. */
 export function splitStatementName(data: HomeData, fromKey: string, description: string, label?: string): HomeData {
   const slug = "split:" + description.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
@@ -173,7 +187,7 @@ export function similarMerchants(list: MerchantSummary[]): [MerchantSummary, Mer
 
 /* ------------------------------ Money flow ------------------------------ */
 
-export interface FlowLine { key: string; name: string; amount: number; count: number; accountIds: string[]; date: string; bill?: Bill; category: string; unreviewed?: boolean }
+export interface FlowLine { key: string; name: string; amount: number; count: number; accountIds: string[]; date: string; bill?: Bill; category: string; unreviewed?: boolean; paysDown?: string }
 export interface Flow {
   from: string; to: string;
   income: number; bills: number; spending: number; transfers: number; reimbursable: number; net: number;
@@ -214,10 +228,12 @@ export function flowFor(data: HomeData, from: string, to: string): Flow {
     const pref = prefFor(data, c.key);
     const name = pref.name ?? c.bill?.name ?? p2pLabel(t.description) ?? t.description;
     const tt = { ...t, category: pref.category ?? c.bill?.category ?? t.category };
+    const paysDown = pref.paysDownAccountId ? data.accounts.find((a) => a.id === pref.paysDownAccountId)?.name : undefined;
     if (c.kind === "bill") group(bl, c.key, name, tt, c.bill);
     else if (c.kind === "transfer") group(tr, c.key, name, tt);
     else if (c.kind === "reimbursable") group(rb, c.key, name, tt);
     else group(sp, c.key, name, tt);
+    if (paysDown) { const l = (c.kind === "bill" ? bl : c.kind === "transfer" ? tr : c.kind === "reimbursable" ? rb : sp).get(c.key); if (l) l.paysDown = paysDown; }
     if (c.kind !== "transfer") bump(t.accountId, "out", t.amount);
   }
   const sum = (m: Map<string, FlowLine>) => [...m.values()].reduce((s, l) => s + l.amount, 0);

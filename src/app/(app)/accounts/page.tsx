@@ -7,6 +7,7 @@ import { Button, Card, Eyebrow, Field, Mark, Modal, cx, inputCls, money, selectC
 import type { Account, AccountKind } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
 import { brandColorFor, onBrand } from "@/lib/brands";
+import { debtPaymentsFor } from "@/lib/merchants";
 
 const GROUPS: { title: string; kinds: AccountKind[] }[] = [
   { title: "Banks", kinds: ["checking", "savings"] },
@@ -201,6 +202,7 @@ const KIND_LABEL: Record<AccountKind, string> = { checking: "Checking", savings:
 
 /** Institution · product name, then the numbers that matter as callouts. */
 function AccountRow({ a, onClick }: { a: Account; onClick: () => void }) {
+  const data = useHome((s) => s.data)!;
   const isDebt = a.kind === "credit" || a.kind === "loan" || a.kind === "mortgage";
   const sameName = a.name.toLowerCase().includes(a.institution.toLowerCase());
   const callouts: { label: string; value: string; tone?: string }[] = [];
@@ -208,6 +210,7 @@ function AccountRow({ a, onClick }: { a: Account; onClick: () => void }) {
   else callouts.push({ label: isDebt ? "Balance owed" : a.kind === "biller" ? "Typical bill" : "Balance", value: money(a.balance), tone: isDebt && a.balance > 0 ? "text-red" : undefined });
   if (a.apr !== undefined && a.apr > 0) callouts.push({ label: "APR", value: `${a.apr}%` });
   if (a.minPayment) callouts.push({ label: "Minimum", value: money(a.minPayment) });
+  if (isDebt) { const paid = debtPaymentsFor(data, a.id, `${new Date().getFullYear()}-01-01`); if (paid.count) callouts.push({ label: "Paid this year", value: money(paid.total), tone: "text-green" }); }
   if (a.mask) callouts.push({ label: "Ending", value: `••${a.mask}` });
   const color = a.brandColor ?? brandColorFor(a.institution) ?? brandColorFor(a.name);
   return (

@@ -125,7 +125,7 @@ function Section({ title, icon, lines, tone, muted, empty, extra, hint, onPick, 
           <button key={l.key} onClick={() => onPick(l)} className={cx("w-full text-left flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0 hover:bg-surface/60", muted && "opacity-70")}>
             <div className="flex-1 min-w-0">
               <div className="text-[13px] font-semibold truncate">{l.name}{l.unreviewed && <span className="ml-2 text-[10px] font-semibold text-amber bg-amber/10 rounded px-1.5 py-0.5">unreviewed</span>}</div>
-              <div className="text-[11px] text-muted truncate">{l.count > 1 ? `${l.count}× · ` : ""}{new Date(l.date + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}{l.accountIds.length ? ` · ${l.accountIds.map(acctName).join(", ")}` : ""}</div>
+              <div className="text-[11px] text-muted truncate">{l.count > 1 ? `${l.count}× · ` : ""}{new Date(l.date + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}{l.accountIds.length ? ` · ${l.accountIds.map(acctName).join(", ")}` : ""}{l.paysDown ? <span className="text-accent"> · ↓ pays down {l.paysDown}</span> : null}</div>
             </div>
             <div className={cx("text-[13px] font-bold", tone === "green" && "text-green")}>{tone === "green" ? "+" : ""}{money(l.amount)}</div>
           </button>

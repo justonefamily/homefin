@@ -5,6 +5,7 @@ import { STRATEGIES } from "@/lib/strategies";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Field, Modal, byName, cx, inputCls, money, selectCls } from "./ui";
 import { buildYearPlan, type PlanMonth } from "@/lib/yearplan";
+import { debtPaymentsFor } from "@/lib/merchants";
 import { PlanBreakdown, type BreakdownKind } from "./PlanBreakdown";
 import type { Landmark, StrategyId, YearTargets } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
@@ -28,6 +29,7 @@ export function YearPlanView({ today }: { today: Date }) {
   const setStrategy = (strategy: StrategyId) => update((h) => ({ ...h, settings: { ...h.settings, strategy } }), `strategy: ${strategy}`);
   const setExtra = (extraPayment: number) => update((h) => ({ ...h, settings: { ...h.settings, extraPayment } }), `extra payment ${extraPayment}`);
   const isThisYear = year === today.getFullYear();
+  const debtPaidActual = data.accounts.filter((a) => a.kind === "credit" || a.kind === "loan" || a.kind === "mortgage").reduce((s, a) => s + debtPaymentsFor(data, a.id, `${year}-01-01`, `${year}-12-31`).total, 0);
   const gap = (target: number | undefined, value: number, goodWhenHigher: boolean) => target === undefined ? undefined : (goodWhenHigher ? value >= target : value <= target) ? "green" : "red";
 
   return (
@@ -67,7 +69,7 @@ export function YearPlanView({ today }: { today: Date }) {
         <Kpi dark label={`In your pocket · end of ${year}`} value={money(t.pocketEnd)} sub={targets.pocket !== undefined ? `target ${money(targets.pocket)} · ${t.pocketEnd >= targets.pocket ? "on track" : `${money(targets.pocket - t.pocketEnd)} short`}` : withStart ? `starts from ${money(yp.startBalance)} checking` : "from $0"} tone={t.pocketEnd < 0 ? "red" : gap(targets.pocket, t.pocketEnd, true)} />
         <Kpi onClick={() => setBreakdown({ month: yp.months[Math.max(0, isThisYear ? today.getMonth() : 0)], kind: "income" })} label="Income" value={money(t.income)} sub={targets.income !== undefined ? `target ${money(targets.income)}` : isThisYear ? `${money(yp.toDate.income)} so far` : `${money(t.income / 12)}/mo expected`} tone={gap(targets.income, t.income, true)} />
         <Kpi onClick={() => setBreakdown({ month: yp.months[Math.max(0, isThisYear ? today.getMonth() : 0)], kind: "outgo" })} label="Spending" value={money(t.spending)} sub={targets.spending !== undefined ? `cap ${money(targets.spending)}` : `bills ${money(t.bills)} · everyday ${money(t.everyday)}`} tone={gap(targets.spending, t.spending, false)} />
-        <Kpi label={`Debt remaining · Dec ${year}`} value={money(t.debtEnd)} sub={targets.debt !== undefined ? `target ${money(targets.debt)}` : t.debtStart > 0 ? `${money(t.debtPaid)} paid down from ${money(t.debtStart)}` : "no debt tracked"} tone={t.debtEnd === 0 && t.debtStart > 0 ? "green" : gap(targets.debt, t.debtEnd, false)} />
+        <Kpi label={`Debt remaining · Dec ${year}`} value={money(t.debtEnd)} sub={targets.debt !== undefined ? `target ${money(targets.debt)}${debtPaidActual ? ` · ${money(debtPaidActual)} paid so far` : ""}` : debtPaidActual ? `${money(debtPaidActual)} actually paid toward debt in ${year}` : t.debtStart > 0 ? `${money(t.debtPaid)} paid down from ${money(t.debtStart)}` : "no debt tracked"} tone={t.debtEnd === 0 && t.debtStart > 0 ? "green" : gap(targets.debt, t.debtEnd, false)} />
         <Kpi label="Purposed" value={money(t.landmarks)} sub={`${t.landmarkCount} landmark${t.landmarkCount === 1 ? "" : "s"} you set`} tone="amber" />
       </div>
       <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={withStart} onChange={(e) => setWithStart(e.target.checked)} className="w-4 h-4 accent-[#0e6b74]" /> Start &quot;in your pocket&quot; from today&apos;s checking balance</label>
