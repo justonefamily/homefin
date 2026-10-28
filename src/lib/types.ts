@@ -88,6 +88,9 @@ export interface MerchantPref {
   category?: string;
   /** This payment brings down a tracked loan or card (an Account of kind credit/loan/mortgage). Money out, but toward a balance. */
   paysDownAccountId?: string;
+  /** Not an everyday spend — a one-off or seasonal cost (the cruise, the car repair). Still counts in totals, but
+   *  lives outside the Everyday section and the everyday average the plan uses. */
+  occasional?: boolean;
 }
 
 export interface PaySchedule {

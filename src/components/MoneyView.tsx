@@ -159,7 +159,7 @@ function MerchantsView({ today }: { today: Date }) {
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const row = (m: MerchantSummary) => {
-          const badge = m.kind === "bill" ? { text: "Bill", cls: "text-accent bg-accent-bg" } : m.kind === "transfer" ? { text: "Transfer", cls: "text-muted bg-surface" } : m.kind === "ignore" ? { text: "Hidden", cls: "text-muted bg-surface" } : m.kind === "reimbursable" ? { text: "Coming back", cls: "text-amber bg-amber/10" } : m.recurring ? { text: "Recurring — bill?", cls: "text-amber bg-amber/10" } : null;
+          const badge = m.kind === "bill" ? { text: "Bill", cls: "text-accent bg-accent-bg" } : m.kind === "transfer" ? { text: "Transfer", cls: "text-muted bg-surface" } : m.kind === "ignore" ? { text: "Hidden", cls: "text-muted bg-surface" } : m.kind === "reimbursable" ? { text: "Coming back", cls: "text-amber bg-amber/10" } : m.occasional ? { text: "One-off", cls: "text-muted bg-surface" } : m.recurring ? { text: "Recurring — bill?", cls: "text-amber bg-amber/10" } : null;
           return (
             <button key={m.key} onClick={() => setPick(m)} className="w-full text-left px-4 py-3 border-b border-line-soft last:border-b-0 hover:bg-surface/60 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center">
               <div className="min-w-0 text-[14px] font-semibold truncate">{m.name}</div>
@@ -246,9 +246,13 @@ function EverydayView({ today }: { today: Date }) {
   const from = ymd(addMonths(startOfMonth(today), -monthsBack));
   const span_ = monthsBack === 0 ? 1 : monthsBack + today.getDate() / getDaysInMonth(today);
   const all = useMemo(() => merchantSummaries(data, from, end), [data, from, end]);
-  const spend = all.filter((m) => m.kind === "spend");
+  const everydayAll = all.filter((m) => m.kind === "spend");
+  const occasional = everydayAll.filter((m) => m.occasional);
+  const spend = everydayAll.filter((m) => !m.occasional);
   const total = spend.reduce((s, m) => s + m.total, 0);
+  const occasionalTotal = occasional.reduce((s, m) => s + m.total, 0);
   const perMonth = Math.round(total / span_);
+  const [showOccasional, setShowOccasional] = useState(false);
   const estimate = data.settings.everydaySpend;
   const catName = (id: string) => data.budgets.find((b) => b.id === id)?.name ?? "Uncategorized";
   const groups = useMemo(() => {
@@ -272,7 +276,7 @@ function EverydayView({ today }: { today: Date }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
         <Card className="p-3"><div className="text-[11px] text-muted">{monthsBack === 0 ? "Spent so far this month" : "Actual, per month"}</div><div className="text-[17px] font-bold">{money(perMonth)}</div><div className="text-[11px] text-muted">{monthsBack === 0 ? `${today.toLocaleString("en-US", { month: "long" })} 1 – ${today.getDate()}` : `last ${monthsBack} months + this month so far`}</div></Card>
         <Card className="p-3"><div className="text-[11px] text-muted">In the plan</div><div className="text-[17px] font-bold">{money(estimate)}</div><div className={cx("text-[11px] font-semibold", estimate < perMonth ? "text-red" : "text-green")}>{monthsBack === 0 ? (estimate >= perMonth ? `${money(estimate - perMonth)} left this month` : `${money(perMonth - estimate)} over already`) : estimate < perMonth ? `${money(perMonth - estimate)}/mo under-planned` : estimate > perMonth ? `${money(estimate - perMonth)}/mo cushion` : "matches"}</div></Card>
-        <Card className="p-3"><div className="text-[11px] text-muted">Places</div><div className="text-[17px] font-bold">{spend.length}</div><div className="text-[11px] text-muted">{groups.length} categor{groups.length === 1 ? "y" : "ies"}</div></Card>
+        <Card className="p-3"><div className="text-[11px] text-muted">Places</div><div className="text-[17px] font-bold">{spend.length}</div><div className="text-[11px] text-muted">{groups.length} categor{groups.length === 1 ? "y" : "ies"}{occasional.length ? ` · ${occasional.length} one-off${occasional.length === 1 ? "" : "s"} set aside` : ""}</div></Card>
         <Card className="p-3 flex flex-col justify-between"><div className="text-[11px] text-muted">Make the plan match</div><Button onClick={setEstimate} disabled={perMonth === estimate || perMonth === 0 || monthsBack === 0} className="h-9 text-xs mt-1">{monthsBack === 0 ? "Pick 3+ months to set" : `Set everyday to ${money(perMonth)}/mo`}</Button></Card>
       </div>
 
@@ -299,6 +303,21 @@ function EverydayView({ today }: { today: Date }) {
           )}
         </Card>
       ))}
+      {occasional.length > 0 && (
+        <Card className="overflow-hidden border-dashed">
+          <button onClick={() => setShowOccasional(!showOccasional)} aria-expanded={showOccasional} className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-surface/40">
+            <div className="flex-1 min-w-0"><div className="text-sm font-semibold">Not everyday — one-offs &amp; seasonal</div><div className="text-[11px] text-muted">{occasional.length} place{occasional.length === 1 ? "" : "s"} · counted in your totals, kept out of the everyday average</div></div>
+            <div className="text-sm font-bold text-muted">{money(occasionalTotal)}</div>
+            <ChevronRight size={15} className={cx("text-muted transition-transform", showOccasional && "rotate-90")} />
+          </button>
+          {showOccasional && <div className="border-t border-line-soft">{occasional.sort((a, b) => b.total - a.total).map((m) => (
+            <button key={m.key} onClick={() => setPick(m.key)} className="w-full text-left flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0 hover:bg-surface/60">
+              <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold truncate">{m.name}</div><div className="text-[11px] text-muted truncate">{m.count}× · {catName(m.category)}</div></div>
+              <div className="text-[13px] font-semibold">{money(m.total)}</div>
+            </button>
+          ))}</div>}
+        </Card>
+      )}
       {pick && <ItemSheet merchantKey={pick} onClose={() => setPick(null)} />}
     </>
   );

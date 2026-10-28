@@ -120,6 +120,8 @@ export interface MerchantSummary {
   medianDay: number;
   /** Keys that were merged into this one. */
   merged: string[];
+  /** Marked "not an everyday spend". */
+  occasional: boolean;
 }
 
 const median = (xs: number[]) => { const s = xs.slice().sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length ? (s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) : 0; };
@@ -162,6 +164,7 @@ export function merchantSummaries(data: HomeData, from?: string, to?: string): M
       medianAmount: Math.round(median(sorted.map((t) => t.amount)) * 100) / 100,
       medianDay: Math.max(1, Math.min(28, Math.round(median(sorted.map((t) => Number(t.date.slice(8, 10))))))),
       merged: mergedInto.get(key) ?? [],
+      occasional: !!pref.occasional,
     });
   }
   return out.sort((a, b) => b.total - a.total);

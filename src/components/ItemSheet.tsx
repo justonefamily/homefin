@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { EyeOff, Merge, Receipt, Search, Shuffle, Undo2, Ban, Check, Flag } from "lucide-react";
+import { EyeOff, Merge, Receipt, Search, Shuffle, Undo2, Ban, Check, Flag, Sparkles } from "lucide-react";
 import { findFlag, toggleFlag } from "@/lib/flags";
 import { useHome } from "@/store/useHome";
 import { useItem } from "@/store/useItem";
@@ -71,7 +71,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const removed = wordings.filter((w) => !kept.has(w.desc));
   const saveWordings = () => { update((h) => { let next = h; for (const w of removed) { const n = parseNature(w.desc); next = splitStatementName(next, key, w.desc, p2pLabel(w.desc) ?? (n.nature !== "other" ? n.label : undefined)); } return next; }, `split ${removed.length} wording${removed.length === 1 ? "" : "s"} out of ${displayName}`); setKeep(null); setShowWordings(false); };
   const catName = (id: string) => data.budgets.find((b) => b.id === id)?.name ?? "Other";
-  const status = pref.kind === "ignore" ? "Hidden" : pref.kind === "transfer" || (txs[0]?.transfer && pref.kind !== "spend") ? "Transfer between your accounts" : bill ? `Bill · ${bill.name}` : me?.kind === "reimbursable" ? "Reimbursable — money comes back" : dismissed ? "Not a bill (you said)" : suggestion ? "Looks like a bill — not confirmed" : "Everyday spending";
+  const status = pref.kind === "ignore" ? "Hidden" : pref.kind === "transfer" || (txs[0]?.transfer && pref.kind !== "spend") ? "Transfer between your accounts" : bill ? `Bill · ${bill.name}` : me?.kind === "reimbursable" ? "Reimbursable — money comes back" : dismissed ? "Not a bill (you said)" : suggestion ? "Looks like a bill — not confirmed" : pref.occasional ? "One-off / seasonal — not everyday" : "Everyday spending";
 
   const note = (s: string) => `${displayName}: ${s}`;
   const makeBill = () => { update((h) => {
@@ -222,6 +222,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
         {!bill && <Button onClick={makeBill} className="h-10 px-3 text-xs"><Receipt size={13} className="inline -mt-0.5 mr-1" />{suggestion ? "Yes, it's a bill" : "Make this a bill"}{me ? ` · ${money(suggestion?.amount ?? me.medianAmount)}` : ""}</Button>}
         {(bill || suggestion) && !dismissed && <Button variant="secondary" onClick={notABill} className="h-10 px-3 text-xs"><Ban size={13} className="inline -mt-0.5 mr-1" />Not a bill</Button>}
         {dismissed && <Button variant="secondary" onClick={suggestAgain} className="h-10 px-3 text-xs"><Check size={13} className="inline -mt-0.5 mr-1" />Suggest as a bill again</Button>}
+        {!bill && pref.kind !== "transfer" && <Button variant="secondary" onClick={() => { update((h) => setMerchantPref(h, key, { occasional: !pref.occasional }), note(pref.occasional ? "back to everyday" : "not an everyday spend")); onClose(); }} className="h-10 px-3 text-xs">{pref.occasional ? <><Undo2 size={13} className="inline -mt-0.5 mr-1" />Back to everyday</> : <><Sparkles size={13} className="inline -mt-0.5 mr-1" />Not an everyday spend</>}</Button>}
         {pref.kind !== "transfer" && <Button variant="secondary" onClick={() => setKind("transfer")} className="h-10 px-3 text-xs"><Shuffle size={13} className="inline -mt-0.5 mr-1" />It&apos;s a transfer</Button>}
         {pref.kind !== "ignore" && <Button variant="secondary" onClick={() => setKind("ignore")} className="h-10 px-3 text-xs"><EyeOff size={13} className="inline -mt-0.5 mr-1" />Hide it</Button>}
         {pref.kind && pref.kind !== "spend" && <Button variant="secondary" onClick={() => setKind("spend")} className="h-10 px-3 text-xs"><Undo2 size={13} className="inline -mt-0.5 mr-1" />Count as spending again</Button>}
