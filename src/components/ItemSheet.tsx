@@ -4,7 +4,7 @@ import { EyeOff, Merge, Receipt, Search, Shuffle, Undo2, Ban, Check } from "luci
 import { useHome } from "@/store/useHome";
 import { useItem } from "@/store/useItem";
 import { Button, Field, Modal, cx, inputCls, money, selectCls } from "./ui";
-import { billKeyMap, merchantSummaries, merchantToBill, mergeMerchants, prefFor, resolveKey, setMerchantPref, txKey } from "@/lib/merchants";
+import { billKeyMap, merchantSummaries, merchantToBill, mergeMerchants, prefFor, resolveKey, setMerchantPref, txKey, unmergeMerchant } from "@/lib/merchants";
 import { autoMarkPaid, detectRecurring, merchantKey, p2pLabel, suggestionToBill } from "@/lib/detect";
 import { brandColorFor } from "@/lib/brands";
 import { uid } from "@/lib/storage/adapter";
@@ -41,6 +41,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const suggestion = useMemo(() => detectRecurring(data).find((s) => s.key === key), [data, key]);
   const dismissed = (data.settings.dismissedSuggestions ?? []).includes(key);
   const bill = me?.bill ?? billKeyMap(data).get(key);
+  const mergedAway = (data.settings.merchants?.[rawKey]?.mergedInto && resolveKey(data, rawKey) !== rawKey) ? rawKey : null;
   const displayName = pref.name ?? bill?.name ?? (rawNames[0] ? p2pLabel(rawNames[0]) : null) ?? rawNames[0] ?? rawKey;
   const [name, setName] = useState(displayName);
   const [category, setCategory] = useState(me?.category ?? bill?.category ?? txs[0]?.category ?? "other");
@@ -77,6 +78,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   return (
     <Modal open onClose={onClose} title={displayName}>
       {/* What the bank says */}
+      {mergedAway && <div className="rounded-[12px] border border-amber-line bg-amber-bg px-3 py-2 text-[12px] flex items-center gap-2"><span className="flex-1">This is merged into <b>{displayName}</b>.</span><button onClick={() => update((h) => unmergeMerchant(h, mergedAway), `unmerged ${mergedAway}`)} className="h-7 px-2.5 rounded-[8px] bg-amber text-white text-[11px] font-semibold">Unmerge</button></div>}
       {rawNames.length > 0 && <div className="text-[12px] text-muted -mt-2 leading-snug">On your statement as <span className="text-ink font-medium">{rawNames.slice(0, 3).join(" · ")}</span>{rawNames.length > 3 ? ` and ${rawNames.length - 3} more` : ""}</div>}
       <div className={cx("rounded-[12px] px-3 py-2 text-[12px] font-semibold", bill ? "bg-accent-bg text-accent" : dismissed ? "bg-surface text-muted" : suggestion ? "bg-amber-bg text-amber" : "bg-surface text-ink")}>{status}</div>
       {me && (
@@ -102,7 +104,17 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
         </div>
       )}
       {me && me.accountIds.length > 0 && <div className="flex flex-wrap gap-1.5">{me.accountIds.map((id) => <AccountChip key={id} data={data} id={id} />)}</div>}
-      {me && me.merged.length > 0 && <div className="text-[11px] text-muted">Includes merged: {me.merged.join(", ")}</div>}
+      {me && me.merged.length > 0 && (
+        <div className="rounded-[12px] border border-line overflow-hidden">
+          <div className="px-3 py-2 text-[11px] font-semibold text-muted bg-surface border-b border-line">Merged into this · {me.merged.length}</div>
+          {me.merged.map((k) => (
+            <div key={k} className="flex items-center gap-3 px-3 py-2 border-b border-line-soft last:border-b-0 text-[12px]">
+              <div className="flex-1 min-w-0 truncate">{data.settings.merchants?.[k]?.name ?? k}</div>
+              <button onClick={() => update((h) => unmergeMerchant(h, k), `unmerged ${k}`)} className="h-7 px-2.5 rounded-[8px] border border-chip text-[11px] font-semibold hover:border-field">Unmerge</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Every transaction */}
       <div className="rounded-[12px] border border-line overflow-hidden">

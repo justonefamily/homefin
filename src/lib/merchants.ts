@@ -114,10 +114,13 @@ export function merchantSummaries(data: HomeData, from?: string, to?: string): M
 export function similarMerchants(list: MerchantSummary[]): [MerchantSummary, MerchantSummary][] {
   const pairs: [MerchantSummary, MerchantSummary][] = [];
   const first = (k: string) => k.split(" ")[0];
-  const GENERIC = new Set(["the", "www", "sq", "tst", "pp", "amzn", "amazon", "paypal", "apple", "google", "walmart", "target"]);
+  const GENERIC = new Set(["the", "www", "sq", "tst", "pp", "amzn", "amazon", "paypal", "apple", "google", "walmart", "target", "zelle", "cash", "venmo", "money", "transfer", "payment", "online", "mobile", "interest", "authorized"]);
+  // Person-to-person payments are never "the same place" as each other — different recipients are different people.
+  const isP2P = (k: string) => /^(zelle|cash app|venmo|paypal|apple cash) to /.test(k);
   for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
     const a = list[i], b = list[j];
     if (a.kind === "ignore" || b.kind === "ignore") continue;
+    if (isP2P(a.key) || isP2P(b.key)) continue;
     const fa = first(a.key), fb = first(b.key);
     const like = (fa === fb && fa.length >= 4 && !GENERIC.has(fa)) || (a.key.length >= 5 && b.key.includes(a.key)) || (b.key.length >= 5 && a.key.includes(b.key));
     if (like) pairs.push([a, b]);
@@ -211,6 +214,11 @@ export const mergeMerchants = (data: HomeData, from: string, into: string): Home
   const target = resolveKey(data, into);
   if (target === from) return data;
   return { ...data, settings: { ...data.settings, merchants: { ...(data.settings.merchants ?? {}), [from]: { ...prefFor(data, from), mergedInto: target } } } };
+};
+/** Undo a merge: `key` becomes its own merchant again (its name/category/kind are kept). */
+export const unmergeMerchant = (data: HomeData, key: string): HomeData => {
+  const cur = { ...prefFor(data, key) }; delete cur.mergedInto;
+  return { ...data, settings: { ...data.settings, merchants: { ...(data.settings.merchants ?? {}), [key]: cur } } };
 };
 export const setMerchantPref = (data: HomeData, key: string, patch: Partial<MerchantPref>): HomeData =>
   ({ ...data, settings: { ...data.settings, merchants: { ...(data.settings.merchants ?? {}), [key]: { ...prefFor(data, key), ...patch } } } });
