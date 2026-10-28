@@ -71,7 +71,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const removed = wordings.filter((w) => !kept.has(w.desc));
   const saveWordings = () => { update((h) => { let next = h; for (const w of removed) { const n = parseNature(w.desc); next = splitStatementName(next, key, w.desc, p2pLabel(w.desc) ?? (n.nature !== "other" ? n.label : undefined)); } return next; }, `split ${removed.length} wording${removed.length === 1 ? "" : "s"} out of ${displayName}`); setKeep(null); setShowWordings(false); };
   const catName = (id: string) => data.budgets.find((b) => b.id === id)?.name ?? "Other";
-  const status = pref.kind === "ignore" ? "Hidden" : pref.kind === "transfer" || (txs[0]?.transfer && pref.kind !== "spend") ? "Transfer between your accounts" : bill ? `Bill · ${bill.name}` : me?.kind === "reimbursable" ? "Reimbursable — money comes back" : dismissed ? "Not a bill (you said)" : suggestion ? "Looks like a bill — not confirmed" : pref.occasional ? "One-off / seasonal — not everyday" : "Everyday spending";
+  const status = pref.kind === "ignore" ? "Hidden" : pref.kind === "transfer" || (txs[0]?.transfer && pref.kind !== "spend") ? "Transfer between your accounts" : bill ? `Bill · ${bill.name}${bill.endedOn ? ` (ended ${new Date(bill.endedOn + "-15").toLocaleDateString("en-US", { month: "short", year: "numeric" })})` : ""}` : me?.kind === "reimbursable" ? "Reimbursable — money comes back" : dismissed ? "Not a bill (you said)" : suggestion ? "Looks like a bill — not confirmed" : pref.occasional ? "One-off / seasonal — not everyday" : "Everyday spending";
 
   const note = (s: string) => `${displayName}: ${s}`;
   const makeBill = () => { update((h) => {

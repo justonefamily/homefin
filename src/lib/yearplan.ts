@@ -2,6 +2,7 @@ import type { HomeData, Landmark } from "./types";
 import { debtsFromAccounts, simulatePayoff } from "./strategies";
 import { expectedMonthlyIncome } from "./detect";
 import { actualsForMonth } from "./actuals";
+import { activeBills } from "./projections";
 import { getDaysInMonth } from "date-fns";
 
 /**
@@ -30,12 +31,12 @@ export interface YearPlan {
 /** Bills not yet paid this month whose due day is still ahead of `today` — what the rest of the month will ask for. */
 export function billsStillAhead(data: HomeData, monthKey: string, today: Date) {
   const paid = new Set(data.payments.filter((p) => p.month === monthKey).map((p) => p.billId));
-  return data.bills.filter((b) => !paid.has(b.id) && b.dueDay > today.getDate()).sort((a, b) => a.dueDay - b.dueDay);
+  return activeBills(data, monthKey).filter((b) => !paid.has(b.id) && b.dueDay > today.getDate()).sort((a, b) => a.dueDay - b.dueDay);
 }
 
 export function buildYearPlan(data: HomeData, year: number, today = new Date(), includeStartBalance = true): YearPlan {
   const plannedIncome = expectedMonthlyIncome(data);
-  const plannedBills = data.bills.reduce((s, b) => s + b.amount, 0);
+  const plannedBillsFor = (key: string) => activeBills(data, key).reduce((s, b) => s + b.amount, 0);
   const plannedEveryday = data.settings.everydaySpend;
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
   const extra = data.settings.extraPayment;
@@ -69,6 +70,7 @@ export function buildYearPlan(data: HomeData, year: number, today = new Date(), 
     const income = source === "actual" ? act!.income : source === "blend" ? act!.income + plannedIncome * left : plannedIncome;
     // This month: what's been paid + only the bills still due after today (a mortgage paid on the 1st isn't "ahead").
     const ahead = isNow ? billsStillAhead(data, key, today).reduce((s, b) => s + b.amount, 0) : 0;
+    const plannedBills = plannedBillsFor(key);
     const bills = source === "actual" ? act!.bills : source === "blend" ? act!.bills + ahead : plannedBills;
     const everyday = source === "actual" ? act!.spend : source === "blend" ? act!.spend + plannedEveryday * left : plannedEveryday;
     const debtExtra = source === "actual" ? 0 : remaining > 0 ? extra : 0;

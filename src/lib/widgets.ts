@@ -2,7 +2,7 @@ import { spendItems } from "./actuals";
 import { getDaysInMonth } from "date-fns";
 import type { HomeData } from "./types";
 import { budgetRows, debtsFromAccounts, monthKey, simulatePayoff, splitRows, strategyMeta } from "./strategies";
-import { billStatuses, billsInRange, currentPeriodRange, weeklyProjection, yearProjection } from "./projections";
+import { activeBills, billStatuses, billsInRange, currentPeriodRange, weeklyProjection, yearProjection } from "./projections";
 import { compare, periodFor, sameTimeLastYear } from "./insights";
 
 /**
@@ -48,7 +48,7 @@ const accts = (d: HomeData) => d.accounts.filter((a) => a.kind !== "credit-score
 
 export const SCALARS: SourceDef<ScalarResult>[] = [
   { id: "income", name: "Monthly income", group: "Cash flow", run: (d) => ({ value: d.pay.monthlyIncome, format: "money" }) },
-  { id: "bills-total", name: "Bills per month", group: "Cash flow", run: (d) => ({ value: sum(d.bills.map((b) => b.amount)), format: "money" }) },
+  { id: "bills-total", name: "Bills per month", group: "Cash flow", run: (d, t) => ({ value: sum(activeBills(d, monthKey(t)).map((b) => b.amount)), format: "money" }) },
   { id: "left-to-pay", name: "Left to pay this period", group: "Cash flow", run: (d, t) => { const s = billsInRange(d, currentPeriodRange(d, t), t); return { value: sum(s.filter((x) => !x.paid).map((x) => x.bill.amount)), format: "money", sub: `${s.filter((x) => x.paid).length} of ${s.length} paid` }; } },
   { id: "overdue", name: "Overdue bills", group: "Cash flow", run: (d, t) => { const s = billStatuses(d, t).filter((x) => x.overdue); return { value: sum(s.map((x) => x.bill.amount)), format: "money", sub: `${s.length} bill${s.length === 1 ? "" : "s"}` }; } },
   { id: "spend-month", name: "Everyday spending this month", group: "Cash flow", run: (d, t) => { const m = monthKey(t); const c = compare(d, "spending", periodFor(t, "month"), sameTimeLastYear(periodFor(t, "month"))); return { value: sum(spendItems(d, [m]).filter((i) => i.kind === "spend").map((i) => i.amount)), format: "money", delta: c.bEmpty ? undefined : c.totalA - c.totalB, sub: c.bEmpty ? undefined : "vs same month last year" }; } },
@@ -67,7 +67,7 @@ export const SCALARS: SourceDef<ScalarResult>[] = [
   { id: "cat-limit", name: "Budget limit of a category", group: "Budget", params: cats, run: (d, _t, p) => ({ value: d.budgets.find((b) => b.id === p)?.limit ?? 0, format: "money" }) },
   { id: "acct-balance", name: "Balance of an account", group: "Accounts", params: accts, run: (d, _t, p) => ({ value: d.accounts.find((a) => a.id === p)?.balance ?? 0, format: "money" }) },
   { id: "starter-goal", name: "Starter fund goal", group: "Goals", run: (d) => ({ value: d.settings.starterFundGoal, format: "money" }) },
-  { id: "ef-goal", name: "Emergency fund goal", group: "Goals", run: (d) => ({ value: (sum(d.bills.map((b) => b.amount)) + d.settings.everydaySpend) * d.settings.emergencyMonths, format: "money" }) },
+  { id: "ef-goal", name: "Emergency fund goal", group: "Goals", run: (d, t) => ({ value: (sum(activeBills(d, monthKey(t)).map((b) => b.amount)) + d.settings.everydaySpend) * d.settings.emergencyMonths, format: "money" }) },
   { id: "debt-paid-ytd", name: "Debt paid down this year", group: "Debt", run: (d, t) => { const y = String(t.getFullYear()); const h = (d.balanceHistory ?? []).filter((p) => p.date < y); const ids = debtsFromAccounts(d.accounts, true).map((x) => x.id); let start = 0, any = false; for (const id of ids) { const pts = h.filter((p) => p.accountId === id).sort((a, b) => b.date.localeCompare(a.date)); if (pts[0]) { start += pts[0].balance; any = true; } } return { value: any ? start - sum(debtsFromAccounts(d.accounts, true).map((x) => x.balance)) : 0, format: "money", sub: any ? `since Jan 1` : "needs balance history" }; } },
 ];
 
@@ -78,7 +78,7 @@ export const SERIES: SourceDef<SeriesResult>[] = [
   { id: "budget-vs-spent", name: "Budget vs spent", group: "Budget", run: (d, t) => ({ format: "money", points: budgetRows(d, monthKey(t), t.getDate(), getDaysInMonth(t)).map((r) => ({ id: r.id, label: r.name, value: r.spent, sub: `limit $${Math.round(r.limit).toLocaleString()}`, color: r.state === "over" ? "#b42318" : r.state === "ahead" ? "#b45309" : "#0e6b74" })) }) },
   { id: "debt-by-acct", name: "Debt by account", group: "Debt", run: (d) => ({ format: "money", points: debtsFromAccounts(d.accounts, true).sort((a, b) => b.balance - a.balance).map((x, i) => ({ id: x.id, label: x.name, value: x.balance, sub: `${x.apr}% APR`, color: PALETTE[i % PALETTE.length] })) }) },
   { id: "payoff-order", name: "Payoff order (current strategy)", group: "Debt", run: (d) => { const p = simulatePayoff(debtsFromAccounts(d.accounts), d.settings.strategy, d.settings.extraPayment); return { format: "number", points: p.order.map((x, i) => ({ id: x.id, label: `${x.rank}. ${x.name}`, value: x.paidOffMonth, sub: `$${Math.round(x.balance).toLocaleString()} · paid off month ${x.paidOffMonth}`, color: i === 0 ? "#0e6b74" : "#9cd3d8" })) }; } },
-  { id: "bills-by-cat", name: "Bills by category", group: "Cash flow", run: (d) => { const m = new Map<string, number>(); for (const b of d.bills) m.set(b.category, (m.get(b.category) ?? 0) + b.amount); return { format: "money", points: [...m].map(([id, v], i) => ({ id, label: d.budgets.find((b) => b.id === id)?.name ?? id, value: v, color: PALETTE[i % PALETTE.length] })).sort((a, b) => b.value - a.value) }; } },
+  { id: "bills-by-cat", name: "Bills by category", group: "Cash flow", run: (d, t) => { const m = new Map<string, number>(); for (const b of activeBills(d, monthKey(t))) m.set(b.category, (m.get(b.category) ?? 0) + b.amount); return { format: "money", points: [...m].map(([id, v], i) => ({ id, label: d.budgets.find((b) => b.id === id)?.name ?? id, value: v, color: PALETTE[i % PALETTE.length] })).sort((a, b) => b.value - a.value) }; } },
   { id: "bills-period", name: "Bills due this period", group: "Cash flow", run: (d, t) => { return { format: "money", points: billsInRange(d, currentPeriodRange(d, t), t).map((x) => ({ id: x.bill.id, label: x.bill.name, value: x.bill.amount, sub: x.paid ? "paid" : x.overdue ? "overdue" : `due ${x.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`, color: x.paid ? "#1e7a3c" : x.overdue ? "#b42318" : "#b45309" })) }; } },
   { id: "weekly-balance", name: "Ending balance by week", group: "Cash flow", run: (d, t) => ({ format: "money", points: weeklyProjection(d, t).map((w) => ({ id: String(w.index), label: `W${w.index + 1}`, value: w.endBalance, sub: w.label, color: w.endBalance < 0 ? "#b42318" : w.state === "current" ? "#141821" : w.state === "past" ? "#0e6b74" : "#9cd3d8" })) }) },
   { id: "monthly-net", name: "Left over by month (year)", group: "Cash flow", run: (d, t) => ({ format: "money", points: yearProjection(d, t).map((m) => ({ id: m.key, label: m.name, value: m.net, sub: m.state === "future" ? "projected" : m.state, color: m.net < 0 ? "#b42318" : m.state === "future" ? "#9cd3d8" : m.state === "current" ? "#141821" : "#0e6b74" })) }) },

@@ -114,7 +114,8 @@ export function babySteps(data: HomeData): BabyStep[] {
   const debts = debtsFromAccounts(data.accounts);
   const debtTotal = debts.reduce((s, d) => s + d.balance, 0);
   const mortgage = data.accounts.filter((a) => a.kind === "mortgage").reduce((s, a) => s + a.balance, 0);
-  const monthlyExpenses = data.bills.reduce((s, b) => s + b.amount, 0) + data.settings.everydaySpend;
+  const nowKey = monthKey(new Date());
+  const monthlyExpenses = data.bills.filter((b) => (!b.startedOn || nowKey >= b.startedOn) && (!b.endedOn || nowKey <= b.endedOn)).reduce((s, b) => s + b.amount, 0) + data.settings.everydaySpend;
   const efGoal = monthlyExpenses * data.settings.emergencyMonths;
   const starter = Math.min(1, data.settings.starterFundGoal ? savings / data.settings.starterFundGoal : 0);
 

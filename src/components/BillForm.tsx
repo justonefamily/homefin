@@ -14,6 +14,8 @@ export function BillForm({ open, onClose, data, bill, onSave, onDelete, onNotABi
   const [category, setCategory] = useState(bill?.category ?? data.budgets[0]?.id ?? "");
   const [accountId, setAccountId] = useState(bill?.accountId ?? "");
   const [autopay, setAutopay] = useState(bill?.autopay ?? false);
+  const [endedOn, setEndedOn] = useState(bill?.endedOn ?? "");
+  const [startedOn, setStartedOn] = useState(bill?.startedOn ?? "");
   const openItem = useItem((s) => s.openItem);
   return (
     <Modal open={open} onClose={onClose} title={bill ? "Edit bill" : "Add a bill"}>
@@ -40,11 +42,15 @@ export function BillForm({ open, onClose, data, bill, onSave, onDelete, onNotABi
         </select>
       </Field>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={autopay} onChange={(e) => setAutopay(e.target.checked)} className="w-4 h-4 accent-[#0e6b74]" /> Autopay is on</label>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Started (optional)" hint="First month it applied"><input className={inputCls} type="month" value={startedOn} onChange={(e) => setStartedOn(e.target.value)} /></Field>
+        <Field label="Ended (optional)" hint="Last month it applied — after this it's history, not due"><input className={inputCls} type="month" value={endedOn} onChange={(e) => setEndedOn(e.target.value)} /></Field>
+      </div>
       {bill?.merchant && <div className="text-[11px] text-muted">This bill was confirmed from your transactions. If that was a mistake, <b>Not a bill</b> removes it and stops suggesting it.</div>}
       <div className="flex gap-2 pt-1 flex-wrap">
         {bill && onDelete && <Button variant="danger" onClick={() => { onDelete(bill.id); onClose(); }}>Delete</Button>}
         {bill && onNotABill && <Button variant="secondary" onClick={() => { onNotABill(bill); onClose(); }}>Not a bill</Button>}
-        <Button className="flex-1" disabled={!name || amount <= 0} onClick={() => { onSave({ id: bill?.id ?? uid(), name, amount, dueDay, category, accountId: accountId || undefined, autopay, cadence: "monthly", merchant: bill?.merchant }); onClose(); }}>Save</Button>
+        <Button className="flex-1" disabled={!name || amount <= 0} onClick={() => { onSave({ id: bill?.id ?? uid(), name, amount, dueDay, category, accountId: accountId || undefined, autopay, cadence: "monthly", merchant: bill?.merchant, startedOn: startedOn || undefined, endedOn: endedOn || undefined }); onClose(); }}>Save</Button>
       </div>
     </Modal>
   );

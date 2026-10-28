@@ -40,6 +40,10 @@ export interface Bill {
   cadence: "monthly";
   /** Normalized merchant key when the bill was detected from (or matched to) bank transactions. */
   merchant?: string;
+  /** First month this bill applied (YYYY-MM). Before it, the bill doesn't count. */
+  startedOn?: string;
+  /** Last month this bill applied (YYYY-MM). After it, the bill is history — it's kept for the record but no longer due. */
+  endedOn?: string;
 }
 
 export interface BillPayment {

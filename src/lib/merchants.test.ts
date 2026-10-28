@@ -101,3 +101,22 @@ describe("refunds", () => {
     expect(f.spendLines.some((l) => l.amount === -50)).toBe(true);
   });
 });
+
+describe("merging two bills", () => {
+  it("keeps the most recently paid one current and ends the older one", () => {
+    const h = home();
+    h.transactions.push(
+      { id: "m1", accountId: "chk", date: "2026-02-01", description: "Old Servicer Mortgage", amount: 3000, category: "housing" },
+      { id: "m2", accountId: "chk", date: "2026-03-01", description: "Old Servicer Mortgage", amount: 3000, category: "housing" },
+      { id: "m3", accountId: "chk", date: "2026-09-01", description: "New Servicer Mortgage", amount: 3001, category: "housing" },
+      { id: "m4", accountId: "chk", date: "2026-10-01", description: "New Servicer Mortgage", amount: 3001, category: "housing" },
+    );
+    h.bills = [
+      { id: "old", name: "Old Servicer", amount: 3000, dueDay: 1, category: "housing", autopay: true, cadence: "monthly", merchant: "old servicer mortgage" },
+      { id: "new", name: "New Servicer", amount: 3001, dueDay: 1, category: "housing", autopay: true, cadence: "monthly", merchant: "new servicer mortgage" },
+    ];
+    const next = mergeMerchants(h, "old servicer mortgage", "new servicer mortgage");
+    expect(next.bills.find((b) => b.id === "old")?.endedOn).toBe("2026-03");
+    expect(next.bills.find((b) => b.id === "new")?.endedOn).toBeUndefined();
+  });
+});

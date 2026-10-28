@@ -41,6 +41,7 @@ export default function BillsPage() {
 
   const suggestions = detectRecurring(data, today);
   const [item, setItem] = useState<string | null>(null);
+  const [showEnded, setShowEnded] = useState(false);
   const confirmSuggestion = (sg: Suggestion) => update((h) => {
     const bill = suggestionToBill(sg, uid());
     const next = { ...h, bills: [...h.bills, bill] };
@@ -154,6 +155,12 @@ export default function BillsPage() {
               ))}
             </Card>
             <Button variant="dashed" onClick={() => setEditing("new")}>+ Add a bill</Button>
+            {data.bills.some((b) => b.endedOn && b.endedOn < month) && (
+              <div className="flex flex-col gap-2">
+                <button onClick={() => setShowEnded(!showEnded)} className="text-xs text-muted text-left">{data.bills.filter((b) => b.endedOn && b.endedOn < month).length} ended bill{data.bills.filter((b) => b.endedOn && b.endedOn < month).length === 1 ? "" : "s"} (kept for history) · <span className="text-accent font-semibold">{showEnded ? "hide" : "show"}</span></button>
+                {showEnded && <Card>{data.bills.filter((b) => b.endedOn && b.endedOn < month).map((b) => <button key={b.id} onClick={() => setEditing(b)} className="w-full text-left flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0 hover:bg-surface/60"><div className="flex-1 min-w-0"><div className="text-[13px] font-semibold truncate text-muted">{b.name}</div><div className="text-[11px] text-muted">ended {new Date(b.endedOn + "-15").toLocaleDateString("en-US", { month: "short", year: "numeric" })}{b.startedOn ? ` · started ${new Date(b.startedOn + "-15").toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : ""}</div></div><div className="text-[13px] text-muted">{money(b.amount)}</div></button>)}</Card>}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -181,6 +188,7 @@ function WeeksView() {
   const max = Math.max(1, ...weeks.map((w) => Math.abs(w.endBalance)));
   const [open, setOpen] = useState<number | null>(null);
   const [item, setItem] = useState<string | null>(null);
+  const [showEnded, setShowEnded] = useState(false);
   return (
     <div className="md:grid md:grid-cols-12 md:gap-6 flex flex-col gap-4">
       <div className="md:col-span-5 flex flex-col gap-4">

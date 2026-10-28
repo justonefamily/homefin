@@ -112,7 +112,7 @@ export function billsInRange(data: HomeData, r: { from: Date; to: Date }, today:
     const [y, m] = key.split("-").map(Number);
     const monthDate = new Date(y, m - 1, 1);
     const dim = getDaysInMonth(monthDate);
-    for (const bill of data.bills) {
+    for (const bill of activeBills(data, key)) {
       const dueDate = new Date(y, m - 1, Math.min(bill.dueDay, dim));
       if (!inRange(dueDate, r)) continue;
       const paid = isPaid(data, bill, key);
@@ -122,6 +122,10 @@ export function billsInRange(data: HomeData, r: { from: Date; to: Date }, today:
   return out.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 }
 
+/** Is this bill in effect for the month? Ended bills (a mortgage that moved to a new servicer) stay for history but stop being due. */
+export const billActive = (b: Bill, month: string) => (!b.startedOn || month >= b.startedOn) && (!b.endedOn || month <= b.endedOn);
+export const activeBills = (data: HomeData, month: string) => data.bills.filter((b) => billActive(b, month));
+
 export const isPaid = (data: HomeData, bill: Bill, month: string) => data.payments.some((p) => p.billId === bill.id && p.month === month);
 
 export interface BillStatus { bill: Bill; paid: boolean; overdue: boolean; dueDate: Date; }
@@ -129,7 +133,7 @@ export interface BillStatus { bill: Bill; paid: boolean; overdue: boolean; dueDa
 export function billStatuses(data: HomeData, date: Date): BillStatus[] {
   const month = monthKey(date);
   const dim = getDaysInMonth(date);
-  return data.bills
+  return activeBills(data, month)
     .map((bill) => {
       const paid = isPaid(data, bill, month);
       const day = Math.min(bill.dueDay, dim);
@@ -217,10 +221,10 @@ export interface MonthRow { month: number; name: string; key: string; income: nu
 
 export function yearProjection(data: HomeData, today: Date): MonthRow[] {
   const year = today.getFullYear();
-  const monthlyBills = data.bills.reduce((s, b) => s + b.amount, 0);
   return Array.from({ length: 12 }, (_, m) => {
     const d = new Date(year, m, 1);
     const key = monthKey(d);
+    const monthlyBills = activeBills(data, key).reduce((s, b) => s + b.amount, 0);
     const state: MonthRow["state"] = m < today.getMonth() ? "past" : m === today.getMonth() ? "current" : "future";
     // Past months: use recorded transactions + bills paid that month if any; otherwise fall back to the template.
     const act = actualsForMonth(data, key);

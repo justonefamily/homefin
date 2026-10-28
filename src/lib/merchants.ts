@@ -96,7 +96,7 @@ export function migrateMerchantKeys(data: HomeData): HomeData | null {
 
 export const billKeyMap = (data: HomeData) => {
   const m = new Map<string, Bill>();
-  for (const b of data.bills) { const k = resolveKey(data, b.merchant ?? merchantKey(b.name)); if (k.length >= 3) m.set(k, b); }
+  for (const b of [...data.bills].sort((x, y) => (x.endedOn ? 1 : 0) - (y.endedOn ? 1 : 0))) { const k = resolveKey(data, b.merchant ?? merchantKey(b.name)); if (k.length >= 3 && !m.has(k)) m.set(k, b); }
   return m;
 };
 
@@ -275,7 +275,18 @@ export const merchantToBill = (m: MerchantSummary, id: string, category?: string
 export const mergeMerchants = (data: HomeData, from: string, into: string): HomeData => {
   const target = resolveKey(data, into);
   if (target === from) return data;
-  return { ...data, settings: { ...data.settings, merchants: { ...(data.settings.merchants ?? {}), [from]: { ...prefFor(data, from), mergedInto: target } } } };
+  let next: HomeData = { ...data, settings: { ...data.settings, merchants: { ...(data.settings.merchants ?? {}), [from]: { ...prefFor(data, from), mergedInto: target } } } };
+  // Two bills meeting in one merge (the old mortgage servicer and the new one): only the one paid most recently stays current;
+  // the other is ended on the month of its last payment and kept for history.
+  const billOf = (k: string) => next.bills.find((b) => b.merchant && resolveKey(data, b.merchant) === k && !b.endedOn);
+  const a = billOf(from), b = billOf(target);
+  if (a && b && a.id !== b.id) {
+    const last = (k: string) => data.transactions.filter((t) => t.amount > 0 && txKey(data, t) === k).map((t) => t.date).sort().pop() ?? "";
+    const [older, lastOlder] = last(from) <= last(target) ? [a, last(from)] : [b, last(target)];
+    const endedOn = (lastOlder || new Date().toISOString()).slice(0, 7);
+    next = { ...next, bills: next.bills.map((x) => (x.id === older.id ? { ...x, endedOn } : x)) };
+  }
+  return next;
 };
 /** Undo a merge: `key` becomes its own merchant again (its name/category/kind are kept). */
 export const unmergeMerchant = (data: HomeData, key: string): HomeData => {
