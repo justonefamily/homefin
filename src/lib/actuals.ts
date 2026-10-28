@@ -21,7 +21,7 @@ export function actualsByDay(data: HomeData, monthKey: string): DayActual[] {
   for (const t of data.transactions) {
     if (!t.date.startsWith(monthKey) || t.amount <= 0) continue;
     const c = classify(data, t, bills);
-    if (c.kind === "ignore" || c.kind === "transfer") continue;
+    if (c.kind === "ignore" || c.kind === "transfer" || c.kind === "reimbursable") continue;
     const d = days[Number(t.date.slice(8, 10))];
     if (c.kind === "bill") { d.bills += t.amount; if (c.bill && !d.billNames.includes(c.bill.name)) d.billNames.push(c.bill.name); }
     else d.spend += t.amount;

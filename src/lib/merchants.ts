@@ -20,7 +20,12 @@ export function resolveKey(data: HomeData, key: string): string {
 export const txKey = (data: HomeData, t: Transaction) => resolveKey(data, merchantKey(t.description));
 
 /** How a transaction counts: a bill payment, a transfer, ignored, or plain spending. */
-export function classify(data: HomeData, t: Transaction, billKeys: Map<string, Bill>): { kind: "bill" | "transfer" | "ignore" | "spend"; key: string; bill?: Bill } {
+export type TxKind = "bill" | "transfer" | "ignore" | "spend" | "reimbursable";
+
+/** Is this category one where the money comes back? */
+export const isReimbursable = (data: HomeData, category: string | undefined) => !!category && data.budgets.find((b) => b.id === category)?.bucket === "reimbursable";
+
+export function classify(data: HomeData, t: Transaction, billKeys: Map<string, Bill>): { kind: TxKind; key: string; bill?: Bill } {
   const key = txKey(data, t);
   const pref = prefFor(data, key);
   if (pref.kind === "ignore") return { kind: "ignore", key };
@@ -28,6 +33,7 @@ export function classify(data: HomeData, t: Transaction, billKeys: Map<string, B
   const bill = billKeys.get(key);
   if (bill) return { kind: "bill", key, bill };
   if (t.transfer && pref.kind !== "spend") return { kind: "transfer", key };
+  if (isReimbursable(data, pref.category ?? t.category)) return { kind: "reimbursable", key };
   return { kind: "spend", key };
 }
 
@@ -49,7 +55,7 @@ export interface MerchantSummary {
   months: number;
   accountIds: string[];
   category: string;
-  kind: "bill" | "transfer" | "ignore" | "spend";
+  kind: TxKind;
   bill?: Bill;
   /** Looks recurring: ≥3 months with roughly monthly gaps. */
   recurring: boolean;
@@ -124,8 +130,8 @@ export function similarMerchants(list: MerchantSummary[]): [MerchantSummary, Mer
 export interface FlowLine { key: string; name: string; amount: number; count: number; accountIds: string[]; date: string; bill?: Bill; category: string; unreviewed?: boolean }
 export interface Flow {
   from: string; to: string;
-  income: number; bills: number; spending: number; transfers: number; net: number;
-  incomeLines: FlowLine[]; billLines: FlowLine[]; spendLines: FlowLine[]; transferLines: FlowLine[];
+  income: number; bills: number; spending: number; transfers: number; reimbursable: number; net: number;
+  incomeLines: FlowLine[]; billLines: FlowLine[]; spendLines: FlowLine[]; transferLines: FlowLine[]; reimbursableLines: FlowLine[];
   byAccount: { accountId: string; in: number; out: number }[];
   /** Bills due in the range with no matching payment yet. */
   unpaidBills: { bill: Bill; dueDate: string }[];
@@ -142,7 +148,7 @@ export function flowFor(data: HomeData, from: string, to: string): Flow {
     const e = lines.get(key) ?? lines.set(key, { key, name, amount: 0, count: 0, accountIds: [], date: t.date, bill, category: t.category ?? "other" }).get(key)!;
     e.amount += t.amount; e.count++; if (t.accountId && !e.accountIds.includes(t.accountId)) e.accountIds.push(t.accountId); if (t.date > e.date) e.date = t.date;
   };
-  const inc = new Map<string, FlowLine>(), bl = new Map<string, FlowLine>(), sp = new Map<string, FlowLine>(), tr = new Map<string, FlowLine>();
+  const inc = new Map<string, FlowLine>(), bl = new Map<string, FlowLine>(), sp = new Map<string, FlowLine>(), tr = new Map<string, FlowLine>(), rb = new Map<string, FlowLine>();
   let internalDeposits = 0;
   for (const e of data.income ?? []) {
     if (e.date < from || e.date > to) continue;
@@ -163,6 +169,7 @@ export function flowFor(data: HomeData, from: string, to: string): Flow {
     const tt = { ...t, category: pref.category ?? c.bill?.category ?? t.category };
     if (c.kind === "bill") group(bl, c.key, name, tt, c.bill);
     else if (c.kind === "transfer") group(tr, c.key, name, tt);
+    else if (c.kind === "reimbursable") group(rb, c.key, name, tt);
     else group(sp, c.key, name, tt);
     if (c.kind !== "transfer") bump(t.accountId, "out", t.amount);
   }
@@ -182,10 +189,11 @@ export function flowFor(data: HomeData, from: string, to: string): Flow {
       unpaidBills.push({ bill: b, dueDate: due });
     }
   }
-  const income = sum(inc), billsTotal = sum(bl), spending = sum(sp), transfers = sum(tr);
+  const income = sum(inc), billsTotal = sum(bl), spending = sum(sp), transfers = sum(tr), reimbursable = sum(rb);
   return {
-    from, to, income, bills: billsTotal, spending, transfers, net: income - billsTotal - spending,
-    incomeLines: sortDesc(inc), billLines: sortDesc(bl), spendLines: sortDesc(sp), transferLines: sortDesc(tr),
+    // Reimbursable money is out of pocket for now, so it's subtracted here; the deposit that returns it comes back in as income.
+    from, to, income, bills: billsTotal, spending, transfers, reimbursable, net: income - billsTotal - spending - reimbursable,
+    incomeLines: sortDesc(inc), billLines: sortDesc(bl), spendLines: sortDesc(sp), transferLines: sortDesc(tr), reimbursableLines: sortDesc(rb),
     byAccount: [...acct.entries()].map(([accountId, v]) => ({ accountId, ...v })).sort((a, b) => b.out + b.in - a.out - a.in),
     unpaidBills: unpaidBills.sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
     internalDeposits,

@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ArrowDownLeft, ArrowUpRight, Merge, Search, Receipt, Shuffle } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowDownLeft, ArrowUpRight, Merge, Search, Receipt, Shuffle, Undo2 } from "lucide-react";
 import { addDays, addMonths, endOfMonth, getDaysInMonth, startOfMonth, startOfWeek } from "date-fns";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Segmented, cx, inputCls, money } from "./ui";
@@ -73,7 +73,7 @@ function FlowView({ today }: { today: Date }) {
         <Card className="p-3"><div className="text-[11px] text-muted">Came in</div><div className="text-[17px] font-bold text-green">{money(flow.income)}</div><div className="text-[11px] text-muted">{flow.incomeLines.length} deposit{flow.incomeLines.length === 1 ? "" : "s"}</div></Card>
         <Card className="p-3"><div className="text-[11px] text-muted">Bills</div><div className="text-[17px] font-bold">{money(flow.bills)}</div><div className="text-[11px] text-muted">{flow.billLines.length} paid{flow.unpaidBills.length ? ` · ${flow.unpaidBills.length} still due` : ""}</div></Card>
         <Card className="p-3"><div className="text-[11px] text-muted">Everything else</div><div className="text-[17px] font-bold">{money(flow.spending)}</div><div className="text-[11px] text-muted">{flow.spendLines.length} place{flow.spendLines.length === 1 ? "" : "s"}</div></Card>
-        <Card className={cx("p-3", flow.net < 0 && "border-red/40")}><div className="text-[11px] text-muted">Left over</div><div className={cx("text-[17px] font-bold", flow.net < 0 ? "text-red" : "text-green")}>{money(flow.net)}</div><div className="text-[11px] text-muted">in − bills − everything else</div></Card>
+        <Card className={cx("p-3", flow.net < 0 && "border-red/40")}><div className="text-[11px] text-muted">Left over</div><div className={cx("text-[17px] font-bold", flow.net < 0 ? "text-red" : "text-green")}>{money(flow.net)}</div><div className="text-[11px] text-muted">in − bills − everything else{flow.reimbursable ? ` − ${money(flow.reimbursable)} fronted` : ""}</div></Card>
       </div>
 
       {flow.byAccount.length > 0 && (
@@ -97,6 +97,7 @@ function FlowView({ today }: { today: Date }) {
       <Section title="Bills" icon={<Receipt size={14} className="text-accent" />} lines={flow.billLines} empty="No bill payments in this range." onPick={setPick} acctName={acctName}
         extra={flow.unpaidBills.length > 0 && <div className="px-4 py-2 text-[11px] text-amber border-t border-line-soft">Still due: {flow.unpaidBills.map((u) => `${u.bill.name} (${money(u.bill.amount)}, ${new Date(u.dueDate + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })})`).join(" · ")}</div>} />
       <Section title="Everything else" icon={<ArrowUpRight size={14} className="text-red" />} lines={flow.spendLines} empty="Nothing else spent in this range." onPick={setPick} acctName={acctName} hint="Tap a line to make it a bill, mark it a transfer, or merge it." />
+      {flow.reimbursableLines.length > 0 && <Section title="Fronted — coming back" icon={<Undo2 size={14} className="text-amber" />} lines={flow.reimbursableLines} empty="" onPick={setPick} acctName={acctName} hint="Reimbursable expenses: out of pocket now, counted as income when the money lands." />}
       {(flow.transferLines.length > 0 || flow.internalDeposits > 0) && <Section title="Transfers between your accounts" icon={<Shuffle size={14} className="text-muted" />} lines={flow.transferLines} muted empty="" onPick={setPick} acctName={acctName} hint={`Card payments, moves to savings, money sent to each other on the shared account — left out of income and spending.${flow.internalDeposits ? ` ${flow.internalDeposits} matching deposit${flow.internalDeposits === 1 ? "" : "s"} ignored too.` : ""}`} />}
 
       {pick && (pick.category === "income" ? null : <ItemSheet merchantKey={pick.key} onClose={() => setPick(null)} />)}
@@ -133,7 +134,7 @@ function MerchantsView({ today }: { today: Date }) {
   const { data: d, update } = useHome();
   const data = d!;
   const [span, setSpan] = useState<"3m" | "12m" | "all">("12m");
-  const [filter, setFilter] = useState<"all" | "spend" | "bill" | "transfer" | "ignore">("all");
+  const [filter, setFilter] = useState<"all" | "spend" | "bill" | "reimbursable" | "transfer" | "ignore">("all");
   const [q, setQ] = useState("");
   const from = span === "all" ? undefined : ymd(addMonths(today, span === "3m" ? -3 : -12));
   const all = useMemo(() => merchantSummaries(data, from), [data, from]);
@@ -153,7 +154,7 @@ function MerchantsView({ today }: { today: Date }) {
         <div className="relative flex-1 min-w-[180px] max-w-xs"><Search size={14} className="absolute left-3 top-3 text-muted" /><input className={cx(inputCls, "h-10 pl-9")} placeholder="Find a merchant…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       </div>
       <div className="flex gap-1.5 flex-wrap text-[11px]">
-        {(["all", "spend", "bill", "transfer", "ignore"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={cx("h-8 px-3 rounded-full border font-semibold", filter === f ? "bg-ink text-white border-ink" : "bg-card border-line text-muted hover:border-field")}>{{ all: "Everything", spend: "Spending", bill: "Bills", transfer: "Transfers", ignore: "Hidden" }[f]}</button>)}
+        {(["all", "spend", "bill", "reimbursable", "transfer", "ignore"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={cx("h-8 px-3 rounded-full border font-semibold", filter === f ? "bg-ink text-white border-ink" : "bg-card border-line text-muted hover:border-field")}>{{ all: "Everything", spend: "Spending", bill: "Bills", reimbursable: "Coming back", transfer: "Transfers", ignore: "Hidden" }[f]}</button>)}
       </div>
       <div className="text-[11px] text-muted -mt-2">{list.length} merchants · {money(total)} in this window</div>
 
@@ -175,7 +176,7 @@ function MerchantsView({ today }: { today: Date }) {
       <Card>
         {list.length === 0 && <div className="px-4 py-3 text-xs text-muted">No merchants yet — link a bank or add transactions.</div>}
         {list.map((m) => {
-          const badge = m.kind === "bill" ? { text: "Bill", cls: "text-accent bg-accent-bg" } : m.kind === "transfer" ? { text: "Transfer", cls: "text-muted bg-surface" } : m.kind === "ignore" ? { text: "Hidden", cls: "text-muted bg-surface" } : m.recurring ? { text: "Recurring — bill?", cls: "text-amber bg-amber/10" } : null;
+          const badge = m.kind === "bill" ? { text: "Bill", cls: "text-accent bg-accent-bg" } : m.kind === "transfer" ? { text: "Transfer", cls: "text-muted bg-surface" } : m.kind === "ignore" ? { text: "Hidden", cls: "text-muted bg-surface" } : m.kind === "reimbursable" ? { text: "Coming back", cls: "text-amber bg-amber/10" } : m.recurring ? { text: "Recurring — bill?", cls: "text-amber bg-amber/10" } : null;
           return (
             <button key={m.key} onClick={() => setPick(m)} className="w-full text-left px-4 py-3 border-b border-line-soft last:border-b-0 hover:bg-surface/60 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center">
               <div className="min-w-0 text-[14px] font-semibold truncate">{m.name}</div>

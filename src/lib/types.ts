@@ -56,8 +56,9 @@ export interface BudgetCategory {
   limit: number; // monthly
   /** Fallback recommendation when there's no spending history for this category. */
   defaultLimit?: number;
-  /** Maps the category into 50/30/20 and 6 Cans buckets. */
-  bucket: "needs" | "wants" | "savings" | "giving" | "education" | "play";
+  /** Maps the category into 50/30/20 and 6 Cans buckets. "reimbursable" = money you front and get back (work expenses,
+   *  splitting a bill with friends) — left out of spending, and the deposit that returns it counts as income. */
+  bucket: "needs" | "wants" | "savings" | "giving" | "education" | "play" | "reimbursable";
 }
 
 export interface Transaction {

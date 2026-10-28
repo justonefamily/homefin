@@ -241,9 +241,9 @@ function CategoryForm({ cat, onClose, onSave, onDelete }: { cat?: BudgetCategory
         <Field label="Monthly limit ($)"><input className={inputCls} type="number" inputMode="decimal" value={limit || ""} onChange={(e) => setLimit(Number(e.target.value))} /></Field>
         <Field label="Default ($)" hint="Used as the recommendation when there's no spending history."><input className={inputCls} type="number" inputMode="decimal" value={defaultLimit || ""} onChange={(e) => setDefaultLimit(Number(e.target.value))} /></Field>
       </div>
-      <Field label="Counts toward" hint="Used by 50/30/20 and 6 Cans to sort this category into a bucket.">
+      <Field label="Counts toward" hint="Used by 50/30/20 and 6 Cans to sort this category into a bucket. Reimbursable = you front it and it comes back, so it isn't spending.">
         <select className={selectCls} value={bucket} onChange={(e) => setBucket(e.target.value as BudgetCategory["bucket"])}>
-          <option value="needs">Needs / necessities</option><option value="wants">Wants</option><option value="play">Play</option><option value="education">Education</option><option value="savings">Savings & debt</option><option value="giving">Giving / tithe</option>
+          <option value="needs">Needs / necessities</option><option value="wants">Wants</option><option value="play">Play</option><option value="education">Education</option><option value="savings">Savings & debt</option><option value="giving">Giving / tithe</option><option value="reimbursable">Reimbursable expense — money comes back</option>
         </select>
       </Field>
       <div className="flex gap-2 pt-1">

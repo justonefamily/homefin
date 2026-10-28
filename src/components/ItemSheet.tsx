@@ -48,7 +48,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
   const catName = (id: string) => data.budgets.find((b) => b.id === id)?.name ?? "Other";
-  const status = pref.kind === "ignore" ? "Hidden" : pref.kind === "transfer" || (txs[0]?.transfer && pref.kind !== "spend") ? "Transfer between your accounts" : bill ? `Bill · ${bill.name}` : dismissed ? "Not a bill (you said)" : suggestion ? "Looks like a bill — not confirmed" : "Everyday spending";
+  const status = pref.kind === "ignore" ? "Hidden" : pref.kind === "transfer" || (txs[0]?.transfer && pref.kind !== "spend") ? "Transfer between your accounts" : bill ? `Bill · ${bill.name}` : me?.kind === "reimbursable" ? "Reimbursable — money comes back" : dismissed ? "Not a bill (you said)" : suggestion ? "Looks like a bill — not confirmed" : "Everyday spending";
 
   const note = (s: string) => `${displayName}: ${s}`;
   const makeBill = () => { update((h) => {

@@ -159,7 +159,7 @@ const SPLITS: Record<"503020" | "sixcans", { id: string; name: string; pct: numb
 
 /** Actual monthly spend per budget bucket: bills + transactions for the month. */
 export function actualByBucket(data: HomeData, month: string): Record<BudgetCategory["bucket"], number> {
-  const out: Record<BudgetCategory["bucket"], number> = { needs: 0, wants: 0, savings: 0, giving: 0, education: 0, play: 0 };
+  const out: Record<BudgetCategory["bucket"], number> = { needs: 0, wants: 0, savings: 0, giving: 0, education: 0, play: 0, reimbursable: 0 };
   const bucketOf = (cat: string) => data.budgets.find((b) => b.id === cat)?.bucket ?? "needs";
   for (const b of data.bills) out[bucketOf(b.category)] += b.amount;
   for (const t of data.transactions) if (t.date.startsWith(month)) out[bucketOf(t.category)] += t.amount;
