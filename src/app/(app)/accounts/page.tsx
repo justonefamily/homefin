@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import Script from "next/script";
 import { RefreshCw } from "lucide-react";
 import { useHome } from "@/store/useHome";
-import { Button, Card, Eyebrow, Field, Mark, Modal, cx, inputCls, money, selectCls } from "@/components/ui";
+import { Button, Card, Eyebrow, Field, Mark, Modal, Segmented, cx, inputCls, money, selectCls } from "@/components/ui";
+import { CreditView } from "@/components/CreditView";
 import type { Account, AccountKind } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
 import { brandColorFor, onBrand } from "@/lib/brands";
@@ -31,6 +32,7 @@ export default function AccountsPage() {
   const data = d!;
   const [editing, setEditing] = useState<Account | "new" | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [tab, setTab] = useState<"accounts" | "credit">(typeof location !== "undefined" && location.hash === "#credit" ? "credit" : "accounts");
   const [msg, setMsg] = useState<string | null>(null);
   const [links, setLinks] = useState<{ item_id: string; institution: string | null; created_at: string }[]>([]);
   const loadLinks = useCallback(async () => { if (adapter.kind !== "supabase") return; try { const r = await fetch("/api/plaid/item"); if (r.ok) setLinks((await r.json()).items ?? []); } catch { /* ignore */ } }, [adapter.kind]);
@@ -125,13 +127,16 @@ export default function AccountsPage() {
   return (
     <>
       {plaidEnabled && <Script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js" strategy="afterInteractive" />}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Accounts</h1>
-        <div className="flex gap-2">
-          {plaidEnabled && live > 0 && <Button variant="secondary" onClick={sync} disabled={syncing}><RefreshCw size={14} className={cx("inline mr-1", syncing && "animate-spin")} /> Sync</Button>}
-          <Button onClick={() => setEditing("new")} className="rounded-full">+ Add</Button>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h1 className="text-2xl font-bold tracking-tight">{tab === "credit" ? "Credit" : "Accounts"}</h1>
+        <div className="flex gap-2 items-center">
+          <div className="w-44"><Segmented size="sm" value={tab} onChange={setTab} options={[{ id: "accounts", label: "Accounts" }, { id: "credit", label: "Credit" }]} /></div>
+          {tab === "accounts" && plaidEnabled && live > 0 && <Button variant="secondary" onClick={sync} disabled={syncing}><RefreshCw size={14} className={cx("inline mr-1", syncing && "animate-spin")} /> Sync</Button>}
+          {tab === "accounts" && <Button onClick={() => setEditing("new")} className="rounded-full">+ Add</Button>}
         </div>
       </div>
+      {tab === "credit" && <CreditView />}
+      {tab === "accounts" && <>
 
       <Card className="bg-accent-bg border-accent-line p-3.5 flex items-start gap-2.5">
         <div className={cx("w-2.5 h-2.5 rounded-full mt-1 shrink-0", live ? "bg-green" : "bg-field")} />
@@ -192,6 +197,7 @@ export default function AccountsPage() {
       </div>
       <div className="text-xs text-muted leading-relaxed">Banks, cards and loans connect through Plaid (persistent tokens, background refresh). Billers like AT&amp;T and Xfinity rarely offer APIs — add them manually with a due day, or forward their bill emails to the parser address once that&apos;s set up. Tokens are stored server-side, never in the app.</div>
 
+      </>}
       {editing && <AccountForm acct={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={save} onDelete={remove} />}
     </>
   );

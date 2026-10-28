@@ -35,4 +35,4 @@ function routeHost(req: NextRequest, res: NextResponse, signedIn: boolean) {
   }
   return res;
 }
-export const config = { matcher: ["/((?!_next|sw.js|offline.html|manifest.webmanifest|hub.webmanifest|\\.well-known|favicon.ico|icon.*\\.png|hub-icon.*|screenshot.*\\.png|apple-touch-icon.png|icon.svg).*)"] };
+export const config = { matcher: ["/((?!_next|sw.js|offline.html|manifest.webmanifest|hub.webmanifest|\\.well-known|pdfjs|favicon.ico|icon.*\\.png|hub-icon.*|screenshot.*\\.png|apple-touch-icon.png|icon.svg).*)"] };

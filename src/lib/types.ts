@@ -248,6 +248,8 @@ export interface HomeData {
   grocery?: Record<string, { checked: string[]; extras: string[] }>;
   /** Things flagged for a later look: a whole merchant, one transaction, or one deposit. */
   flags?: Flag[];
+  /** Imported credit reports (parsed on-device; no SSN or addresses kept). See lib/credit. */
+  credit?: { reports: import("./credit/types").CreditReport[] };
   /** The Focus board: widgets the household composed. See lib/widgets.ts. */
   dashboard?: { widgets: import("./widgets").Widget[] };
   /** True once the welcome screen has been completed, so an empty-but-created home opens straight into the app. */
