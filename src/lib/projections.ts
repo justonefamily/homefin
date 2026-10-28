@@ -83,6 +83,15 @@ export function shiftPeriod(data: HomeData, r: PeriodRange, by: number): PeriodR
 
 export const inRange = (d: Date, r: { from: Date; to: Date }) => d >= r.from && d <= r.to;
 
+/** Every pay period that touches `month` (the one covering the 1st, then each one starting inside the month) — 2 or 3 of them. */
+export function periodsTouching(data: HomeData, month: Date): PeriodRange[] {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const last = endOfMonth(first);
+  const out: PeriodRange[] = [currentPeriodRange(data, first)];
+  for (let i = 0; i < 4; i++) { const next = shiftPeriod(data, out[out.length - 1], 1); if (next.from > last) break; out.push(next); }
+  return out;
+}
+
 /** Bills due inside a date range, with paid/overdue judged against the month each due date lands in. */
 export function billsInRange(data: HomeData, r: { from: Date; to: Date }, today: Date): BillStatus[] {
   const out: BillStatus[] = [];

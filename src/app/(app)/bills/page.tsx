@@ -9,7 +9,7 @@ import { PeriodToggle } from "@/components/PeriodToggle";
 import { BillForm } from "@/components/BillForm";
 import { ItemSheet } from "@/components/ItemSheet";
 import { Button, Card, Eyebrow, Segmented, SectionTitle, Stat, cx, fmt, money } from "@/components/ui";
-import { billStatuses, billsInRange, currentPeriodRange, inRange, shiftPeriod, weeklyProjection, yearProjection } from "@/lib/projections";
+import { billStatuses, billsInRange, currentPeriodRange, inRange, periodsTouching, weeklyProjection, yearProjection } from "@/lib/projections";
 import { monthKey } from "@/lib/strategies";
 import type { Bill } from "@/lib/types";
 import { autoMarkPaid, detectRecurring, merchantKey, suggestionToBill, type Suggestion } from "@/lib/detect";
@@ -26,7 +26,7 @@ export default function BillsPage() {
   const today = useToday();
   const [view, setView] = useState<View>((params.get("view") as View) || "month");
   const [period, setPeriod] = useState(() => currentPeriodRange(data, today));
-  const periodChoices = [period, shiftPeriod(data, period, period.period === "a" ? 1 : -1)].sort((a, b) => a.from.getTime() - b.from.getTime());
+  const periodChoices = periodsTouching(data, today);
   const [editing, setEditing] = useState<Bill | "new" | null>(null);
   const dim = getDaysInMonth(today);
   const month = monthKey(today);

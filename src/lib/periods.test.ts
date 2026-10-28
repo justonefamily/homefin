@@ -42,3 +42,13 @@ describe("pay periods anchored to paydays", () => {
     expect(periodRangeFor(h, new Date(2026, 1, 1), "b").label).toBe("Feb 28 – Mar 14");
   });
 });
+
+describe("periods touching a month", () => {
+  it("October with 15/30 paydays: Sep 30 – Oct 14, Oct 15 – 29, Oct 30 – Nov 14", async () => {
+    const { periodsTouching } = await import("./projections");
+    const h = emptyHome(); h.pay = { monthlyIncome: 1, payDays: [15, 30], splitDay: 15, periodMode: "paydays" };
+    expect(periodsTouching(h, new Date(2026, 9, 28)).map((r) => r.label)).toEqual(["Sep 30 – Oct 14", "Oct 15 – 29", "Oct 30 – Nov 14"]);
+    const g = emptyHome(); g.pay = { monthlyIncome: 1, payDays: [1, 16], splitDay: 15 };
+    expect(periodsTouching(g, new Date(2026, 9, 28)).map((r) => r.label)).toEqual(["Oct 1 – 15", "Oct 16 – 31"]);
+  });
+});

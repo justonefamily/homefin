@@ -9,7 +9,7 @@ import { useItem } from "@/store/useItem";
 import { useToday } from "@/components/hooks";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { Card, Mark, Row, SectionTitle, cx, fmt, money } from "@/components/ui";
-import { billsInRange, currentPeriodRange, periodRangeFor, shiftPeriod, weeklyProjection } from "@/lib/projections";
+import { billsInRange, currentPeriodRange, periodsTouching, weeklyProjection } from "@/lib/projections";
 import { debtsFromAccounts, simulatePayoff, strategyMeta } from "@/lib/strategies";
 import { CreditCard, BarChart3, CalendarDays, Sparkles } from "lucide-react";
 import { detectIncome, detectRecurring, expectedMonthlyIncome, matchIncomeEvents, merchantKey, suggestionToSource } from "@/lib/detect";
@@ -23,8 +23,7 @@ export default function HomePage() {
   const params = useSearchParams();
   const [tab, setTab] = useState<"today" | "focus">(params.get("view") === "focus" ? "focus" : "today");
   const [period, setPeriod] = useState(() => currentPeriodRange(data, today));
-  const periodChoices = [period, shiftPeriod(data, period, period.period === "a" ? 1 : -1)].sort((a, b) => a.from.getTime() - b.from.getTime());
-  void periodRangeFor;
+  const periodChoices = periodsTouching(data, today);
   const statuses = billsInRange(data, period, today);
   const total = statuses.reduce((s, b) => s + b.bill.amount, 0);
   const paid = statuses.filter((s) => s.paid).reduce((s, b) => s + b.bill.amount, 0);
