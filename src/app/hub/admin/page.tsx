@@ -3,13 +3,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { Shell } from "@/components/hub/Shell";
-import { AppTile } from "@/components/hub/AppTile";
+import { AppTile, AppMark } from "@/components/hub/AppTile";
+import { HUB_ICONS } from "@/lib/hubIcons";
 import { useApps } from "@/lib/hub";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, Field, Modal, cx, inputCls, selectCls } from "@/components/ui";
 import type { HubApp } from "@/lib/hubTypes";
 
-const blank: Omit<HubApp, "id"> = { slug: "", name: "", tagline: "", description: "", url: "https://", icon: "✨", color: "#0e6b74", status: "soon", sort: 100 };
+const blank: Omit<HubApp, "id"> = { slug: "", name: "", tagline: "", description: "", url: "https://", icon: "sparkles", color: "#0e6b74", status: "soon", sort: 100 };
 
 export default function AdminPage() {
   const { apps, reload } = useApps();
@@ -70,13 +71,17 @@ function AppForm({ app, onClose, onSaved, onError }: { app?: HubApp; onClose: ()
   const remove = async () => { if (!app) return; const { error } = await createClient().from("hub_apps").delete().eq("id", app.id); if (error) onError(error.message); else onSaved(); };
   return (
     <Modal open onClose={onClose} title={app ? `Edit ${app.name}` : "Add an app"}>
-      <div className="flex items-center gap-3">
-        <div className="w-14 h-14 rounded-[16px] flex items-center justify-center text-2xl text-white shrink-0" style={{ background: f.color }}>{/^https?:\/\//.test(f.icon) ? <img src={f.icon} alt="" className="w-full h-full rounded-[16px] object-cover" /> : f.icon}</div>
-        <div className="grid grid-cols-2 gap-2 flex-1">
-          <Field label="Icon (emoji or image URL)"><input className={inputCls} value={f.icon} onChange={(e) => set({ icon: e.target.value })} /></Field>
-          <Field label="Color"><div className="flex gap-2 items-center"><input type="color" value={f.color} onChange={(e) => set({ color: e.target.value })} className="h-11 w-14 rounded-[10px] border border-chip bg-card p-1" /><input className={cx(inputCls, "flex-1")} value={f.color} onChange={(e) => set({ color: e.target.value })} /></div></Field>
-        </div>
+      <div className="flex items-center gap-4">
+        <AppMark app={f} size={64} />
+        <Field label="Color"><div className="flex gap-2 items-center"><input type="color" value={f.color} onChange={(e) => set({ color: e.target.value })} className="h-11 w-14 rounded-[10px] border border-chip bg-card p-1" /><input className={cx(inputCls, "flex-1")} value={f.color} onChange={(e) => set({ color: e.target.value })} /></div></Field>
       </div>
+      <Field label="Icon">
+        <div className="grid grid-cols-8 sm:grid-cols-10 gap-1.5">
+          {Object.entries(HUB_ICONS).map(([name, Icon]) => (
+            <button key={name} type="button" onClick={() => set({ icon: name })} aria-label={name} className={cx("h-10 rounded-[10px] border flex items-center justify-center", f.icon === name ? "border-ink bg-ink text-white" : "border-line bg-card hover:border-field")}><Icon size={18} /></button>
+          ))}
+        </div>
+      </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Name"><input autoFocus className={inputCls} value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field>
         <Field label="Status"><select className={selectCls} value={f.status} onChange={(e) => set({ status: e.target.value as HubApp["status"] })}><option value="live">Live</option><option value="beta">Beta</option><option value="soon">Coming soon</option><option value="hidden">Hidden</option></select></Field>
