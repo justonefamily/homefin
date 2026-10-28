@@ -1,5 +1,5 @@
 import type { Bill, HomeData, MerchantPref, Transaction } from "./types";
-import { merchantKey } from "./detect";
+import { merchantKey, p2pLabel } from "./detect";
 
 /**
  * Where the money goes, by merchant, across every account — and the complete in/out picture
@@ -98,7 +98,7 @@ export function merchantSummaries(data: HomeData, from?: string, to?: string): M
     for (const t of sorted) counts.set(t.category, (counts.get(t.category) ?? 0) + 1);
     const topCat = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "other";
     out.push({
-      key, name: pref.name ?? c.bill?.name ?? sorted[sorted.length - 1].description, total: Math.round(total * 100) / 100, count: sorted.length,
+      key, name: pref.name ?? c.bill?.name ?? p2pLabel(sorted[sorted.length - 1].description) ?? sorted[sorted.length - 1].description, total: Math.round(total * 100) / 100, count: sorted.length,
       firstSeen: sorted[0].date, lastSeen: sorted[sorted.length - 1].date, perMonth: Math.round(total / Math.max(1, monthSet.size)), months: monthSet.size,
       accountIds: [...new Set(sorted.map((t) => t.accountId).filter(Boolean) as string[])],
       category: pref.category ?? c.bill?.category ?? topCat, kind: c.kind, bill: c.bill, recurring,
@@ -166,7 +166,7 @@ export function flowFor(data: HomeData, from: string, to: string): Flow {
     const c = classify(data, t, bills);
     if (c.kind === "ignore") continue;
     const pref = prefFor(data, c.key);
-    const name = pref.name ?? c.bill?.name ?? t.description;
+    const name = pref.name ?? c.bill?.name ?? p2pLabel(t.description) ?? t.description;
     const tt = { ...t, category: pref.category ?? c.bill?.category ?? t.category };
     if (c.kind === "bill") group(bl, c.key, name, tt, c.bill);
     else if (c.kind === "transfer") group(tr, c.key, name, tt);

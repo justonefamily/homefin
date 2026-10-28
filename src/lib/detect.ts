@@ -25,7 +25,36 @@ export interface Suggestion {
   confidence: number;      // 0–1
 }
 
-export const merchantKey = (s: string) =>
+/**
+ * Person-to-person payments (Zelle, Cash App, Venmo, PayPal, Apple Cash) all look alike to a bank — the only thing that
+ * tells them apart is who the money went to. Pull that name out so each recipient is its own merchant.
+ * Returns { platform, who } or null when the description isn't a P2P payment.
+ */
+export function p2pParty(desc: string): { platform: string; who: string } | null {
+  const d = desc.replace(/\s+/g, " ").trim();
+  const clean = (w: string) => w.replace(/\b(conf|ref|on|id|xxxx\w*|oakland|oaklan|ca|ny|fl|tx|il|wa|inc|llc)\b.*$/i, "").replace(/[#*].*$/, "").replace(/\b\d[\d/]*\b.*$/, "").replace(/[^a-z&' ]/gi, " ").replace(/\b(zelle|cash app|venmo|paypal|apple cash|db|cr|payment|pmnt|sent)\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase().split(" ").filter((w, i, a) => a.indexOf(w) === i).slice(0, 3).filter((w, i, a) => !(i === a.length - 1 && /^(of|the|and|to|for|at)$/.test(w))).join(" ");
+  let m: RegExpMatchArray | null;
+  if ((m = d.match(/zelle(?: payment)?(?: hard post)?(?:\s*-\s*zelle)?\s+(?:to|from|db|cr)\s+(.+)/i))) { const who = clean(m[1]); if (who) return { platform: "zelle", who }; }
+  if (/zelle/i.test(d)) { const who = clean(d.replace(/.*zelle/i, "")); return { platform: "zelle", who: who || "unknown" }; }
+  if ((m = d.match(/cash app\*\s*(.+)/i))) { const who = clean(m[1]); if (who) return { platform: "cash app", who }; }
+  if ((m = d.match(/cash app\s+(.+?)\s+\d{6}\s/i))) { const who = clean(m[1]); if (who) return { platform: "cash app", who }; }
+  if (/cash app/i.test(d)) return { platform: "cash app", who: clean(d.replace(/.*cash app/i, "")) || "unknown" };
+  if ((m = d.match(/venmo\s*(?:payment|\*)?\s*(?:to|from)?\s*(.+)/i))) { const who = clean(m[1]); return { platform: "venmo", who: who || "unknown" }; }
+  if ((m = d.match(/apple cash\s*(?:to|from|sent to)?\s*(.*)/i))) { const who = clean(m[1]); return { platform: "apple cash", who: who || "unknown" }; }
+  if ((m = d.match(/paypal\s*(?:\*|transfer|inst xfer|purchase)?\s*(.+)/i))) { const who = clean(m[1].replace(/^\d+\s*/, "")); if (who && !/^(inst|xfer|transfer|purchase)$/.test(who)) return { platform: "paypal", who }; }
+  return null;
+}
+
+/** "Zelle → Daystar Ministries" — a readable name for a P2P payment, or null. */
+export const p2pLabel = (desc: string) => { const p = p2pParty(desc); if (!p) return null; const cap = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase()); return `${cap(p.platform)} → ${cap(p.who)}`; };
+
+export const merchantKey = (s: string) => {
+  const p2p = p2pParty(s);
+  if (p2p) return `${p2p.platform} to ${p2p.who}`;
+  return genericKey(s);
+};
+
+const genericKey = (s: string) =>
   s.toLowerCase()
     .replace(/\b(pos|ach|debit|credit|purchase|payment|pymt|autopay|auto pay|online|web|recurring|bill ?pay|des:|id:|ref|#)\b/g, " ")
     .replace(/\d{3,}/g, " ")           // long numbers: confirmation / account digits

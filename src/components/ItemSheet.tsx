@@ -5,7 +5,7 @@ import { useHome } from "@/store/useHome";
 import { useItem } from "@/store/useItem";
 import { Button, Field, Modal, cx, inputCls, money, selectCls } from "./ui";
 import { billKeyMap, merchantSummaries, merchantToBill, mergeMerchants, prefFor, resolveKey, setMerchantPref, txKey } from "@/lib/merchants";
-import { autoMarkPaid, detectRecurring, merchantKey, suggestionToBill } from "@/lib/detect";
+import { autoMarkPaid, detectRecurring, merchantKey, p2pLabel, suggestionToBill } from "@/lib/detect";
 import { brandColorFor } from "@/lib/brands";
 import { uid } from "@/lib/storage/adapter";
 import type { Bill, HomeData, IncomeEvent } from "@/lib/types";
@@ -41,7 +41,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const suggestion = useMemo(() => detectRecurring(data).find((s) => s.key === key), [data, key]);
   const dismissed = (data.settings.dismissedSuggestions ?? []).includes(key);
   const bill = me?.bill ?? billKeyMap(data).get(key);
-  const displayName = pref.name ?? bill?.name ?? rawNames[0] ?? rawKey;
+  const displayName = pref.name ?? bill?.name ?? (rawNames[0] ? p2pLabel(rawNames[0]) : null) ?? rawNames[0] ?? rawKey;
   const [name, setName] = useState(displayName);
   const [category, setCategory] = useState(me?.category ?? bill?.category ?? txs[0]?.category ?? "other");
   const [mergeInto, setMergeInto] = useState("");
