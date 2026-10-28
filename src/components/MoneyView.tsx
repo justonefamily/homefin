@@ -133,10 +133,11 @@ function Section({ title, icon, lines, tone, muted, empty, extra, hint, onPick, 
 function MerchantsView({ today }: { today: Date }) {
   const { data: d, update } = useHome();
   const data = d!;
-  const [span, setSpan] = useState<"3m" | "12m" | "all">("12m");
+  const [span, setSpan] = useState<"1m" | "3m" | "12m" | "all">("1m");
   const [filter, setFilter] = useState<"all" | "spend" | "bill" | "reimbursable" | "transfer" | "ignore">("all");
   const [q, setQ] = useState("");
-  const from = span === "all" ? undefined : ymd(addMonths(today, span === "3m" ? -3 : -12));
+  const from = span === "all" ? undefined : span === "1m" ? ymd(startOfMonth(today)) : ymd(addMonths(today, span === "3m" ? -3 : -12));
+  const spanLabel = span === "1m" ? `${today.toLocaleString("en-US", { month: "long" })} so far` : span === "3m" ? "last 3 months" : span === "12m" ? "last 12 months" : "all time";
   const all = useMemo(() => merchantSummaries(data, from), [data, from]);
   const similar = useMemo(() => similarMerchants(all), [all]);
   const list = all.filter((m) => (filter === "all" ? m.kind !== "ignore" : m.kind === filter) && (!q || m.name.toLowerCase().includes(q.toLowerCase()) || m.key.includes(q.toLowerCase())));
@@ -150,13 +151,13 @@ function MerchantsView({ today }: { today: Date }) {
   return (
     <>
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="w-56"><Segmented size="sm" value={span} onChange={setSpan} options={[{ id: "3m", label: "3 mo" }, { id: "12m", label: "12 mo" }, { id: "all", label: "All" }]} /></div>
+        <div className="w-full sm:w-80"><Segmented size="sm" value={span} onChange={setSpan} options={[{ id: "1m", label: "This month" }, { id: "3m", label: "3 mo" }, { id: "12m", label: "12 mo" }, { id: "all", label: "All" }]} /></div>
         <div className="relative flex-1 min-w-[180px] max-w-xs"><Search size={14} className="absolute left-3 top-3 text-muted" /><input className={cx(inputCls, "h-10 pl-9")} placeholder="Find a merchant…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       </div>
       <div className="flex gap-1.5 flex-wrap text-[11px]">
         {(["all", "spend", "bill", "reimbursable", "transfer", "ignore"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={cx("h-8 px-3 rounded-full border font-semibold", filter === f ? "bg-ink text-white border-ink" : "bg-card border-line text-muted hover:border-field")}>{{ all: "Everything", spend: "Spending", bill: "Bills", reimbursable: "Coming back", transfer: "Transfers", ignore: "Hidden" }[f]}</button>)}
       </div>
-      <div className="text-[11px] text-muted -mt-2">{list.length} merchants · {money(total)} in this window</div>
+      <div className="text-[11px] text-muted -mt-2">{list.length} merchant{list.length === 1 ? "" : "s"} · {money(total)} · {spanLabel}{filter !== "all" ? ` · ${{ spend: "spending only", bill: "bills only", reimbursable: "coming back only", transfer: "transfers only", ignore: "hidden only" }[filter]}` : ""}</div>
 
       {similar.length > 0 && (
         <Card className="p-4 flex flex-col gap-2 border-accent-line bg-accent-bg/40">
@@ -185,7 +186,7 @@ function MerchantsView({ today }: { today: Date }) {
                 {badge && <span className={cx("shrink-0 text-[10px] font-semibold rounded px-1.5 py-0.5", badge.cls)}>{badge.text}</span>}
                 <span className="truncate">{catName(m.category)} · {m.accountIds.length === 1 ? acctName(m.accountIds[0]) : `${m.accountIds.length} accounts`}{m.merged.length ? ` · +${m.merged.length} merged` : ""}</span>
               </div>
-              <div className="text-[11px] text-muted text-right whitespace-nowrap">{m.count}× · {money(m.perMonth)}/mo</div>
+              <div className="text-[11px] text-muted text-right whitespace-nowrap">{m.count}×{span === "1m" ? "" : ` · ${money(m.perMonth)}/mo`}</div>
               <div className="col-span-2 h-1 rounded-full bg-line-soft overflow-hidden"><div className={cx("h-full rounded-full", m.kind === "bill" ? "bg-accent" : m.kind === "transfer" ? "bg-chip" : "bg-ink")} style={{ width: `${Math.max(2, (m.total / max) * 100)}%` }} /></div>
             </button>
           );
