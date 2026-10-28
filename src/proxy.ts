@@ -25,7 +25,7 @@ function routeHost(req: NextRequest, res: NextResponse, signedIn: boolean) {
     const to = req.nextUrl.clone(); to.pathname = "/login"; to.searchParams.set("next", p); return NextResponse.redirect(to);
   }
   if (onHub) {
-    if (host.startsWith("www.")) { const to = req.nextUrl.clone(); to.host = hubHost!; return NextResponse.redirect(to, 308); }
+    // (apex vs www is settled by the Vercel domain redirect; both hosts serve the store)
     if (!shared && !p.startsWith("/hub")) {
       const to = req.nextUrl.clone(); to.pathname = p === "/" ? "/hub" : `/hub${p}`;
       const r = NextResponse.rewrite(to, { request: req }); res.cookies.getAll().forEach((c) => r.cookies.set(c)); return r;
