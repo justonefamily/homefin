@@ -72,7 +72,8 @@ export function PlanBreakdown({ month, kind, onClose, onEditLandmark }: { month:
               {data.bills.slice().sort((a, b) => a.dueDay - b.dueDay).map((b) => <Line key={b.id} name={b.name} sub={`Due the ${b.dueDay}${ord(b.dueDay)} · ${data.budgets.find((c) => c.id === b.category)?.name ?? "Other"}${b.autopay ? " · autopay" : ""}`} amount={b.amount} onClick={() => openItem(b.merchant ?? b.name.toLowerCase())} />)}
             </Group>
             <Group title="Everyday spending (estimate)" total={data.settings.everydaySpend}>
-              <Line name="Groceries, gas, dining, the rest" sub="From Settings → everyday spending. Set it from last quarter's average on Plan → Budget." amount={data.settings.everydaySpend} />
+              <Line name="Groceries, gas, dining, the rest" sub="The estimate the plan uses. See what's actually behind it, by category and merchant, on Money → Everyday." amount={data.settings.everydaySpend} />
+              <div className="px-3 py-2 text-[11px]"><Link href="/money#everyday" className="text-accent font-semibold">Open Money → Everyday</Link></div>
             </Group>
           </>}
         </>

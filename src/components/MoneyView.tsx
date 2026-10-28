@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ArrowDownLeft, ArrowUpRight, Merge, Search, Receipt, Shuffle } from "lucide-react";
-import { addDays, addMonths, endOfMonth, startOfMonth, startOfWeek } from "date-fns";
+import { addDays, addMonths, endOfMonth, getDaysInMonth, startOfMonth, startOfWeek } from "date-fns";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Segmented, cx, inputCls, money } from "./ui";
 import { flowFor, merchantSummaries, mergeMerchants, similarMerchants, type FlowLine, type MerchantSummary } from "@/lib/merchants";
@@ -32,14 +32,16 @@ function rangeFor(today: Date, kind: Range, offset: number, splitDay: number): {
 }
 
 export function MoneyView({ today }: { today: Date }) {
-  const [tab, setTab] = useState<"flow" | "merchants">("flow");
+  const [tab, setTab] = useState<"flow" | "everyday" | "merchants">(typeof location !== "undefined" && location.hash === "#everyday" ? "everyday" : "flow");
   return (
     <>
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">Money</h1>
-        <div className="w-56"><Segmented size="sm" value={tab} onChange={setTab} options={[{ id: "flow", label: "In & out" }, { id: "merchants", label: "Merchants" }]} /></div>
+        <div className="w-full sm:w-80"><Segmented size="sm" value={tab} onChange={setTab} options={[{ id: "flow", label: "In & out" }, { id: "everyday", label: "Everyday" }, { id: "merchants", label: "Merchants" }]} /></div>
       </div>
-      {tab === "flow" ? <FlowView today={today} /> : <MerchantsView today={today} />}
+      {tab === "flow" && <FlowView today={today} />}
+      {tab === "everyday" && <EverydayView today={today} />}
+      {tab === "merchants" && <MerchantsView today={today} />}
     </>
   );
 }
@@ -152,8 +154,8 @@ function MerchantsView({ today }: { today: Date }) {
       </div>
       <div className="flex gap-1.5 flex-wrap text-[11px]">
         {(["all", "spend", "bill", "transfer", "ignore"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={cx("h-8 px-3 rounded-full border font-semibold", filter === f ? "bg-ink text-white border-ink" : "bg-card border-line text-muted hover:border-field")}>{{ all: "Everything", spend: "Spending", bill: "Bills", transfer: "Transfers", ignore: "Hidden" }[f]}</button>)}
-        <div className="ml-auto self-center text-muted">{list.length} merchants · {money(total)}</div>
       </div>
+      <div className="text-[11px] text-muted -mt-2">{list.length} merchants · {money(total)} in this window</div>
 
       {similar.length > 0 && (
         <Card className="p-4 flex flex-col gap-2 border-accent-line bg-accent-bg/40">
@@ -172,25 +174,98 @@ function MerchantsView({ today }: { today: Date }) {
 
       <Card>
         {list.length === 0 && <div className="px-4 py-3 text-xs text-muted">No merchants yet — link a bank or add transactions.</div>}
-        {list.map((m) => (
-          <button key={m.key} onClick={() => setPick(m)} className="w-full text-left px-4 py-2.5 border-b border-line-soft last:border-b-0 hover:bg-surface/60">
-            <div className="flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold truncate flex items-center gap-1.5">{m.name}
-                  {m.kind === "bill" && <span className="text-[10px] font-semibold text-accent bg-accent-bg rounded px-1.5 py-0.5">bill</span>}
-                  {m.kind === "transfer" && <span className="text-[10px] font-semibold text-muted bg-surface rounded px-1.5 py-0.5">transfer</span>}
-                  {m.kind === "spend" && m.recurring && <span className="text-[10px] font-semibold text-amber bg-amber/10 rounded px-1.5 py-0.5">recurring · not a bill yet</span>}
-                  {m.merged.length > 0 && <span className="text-[10px] text-muted">+{m.merged.length} merged</span>}
-                </div>
-                <div className="text-[11px] text-muted truncate">{m.count}× · {money(m.perMonth)}/mo over {m.months} mo · {catName(m.category)} · {m.accountIds.map(acctName).join(", ")}</div>
+        {list.map((m) => {
+          const badge = m.kind === "bill" ? { text: "Bill", cls: "text-accent bg-accent-bg" } : m.kind === "transfer" ? { text: "Transfer", cls: "text-muted bg-surface" } : m.kind === "ignore" ? { text: "Hidden", cls: "text-muted bg-surface" } : m.recurring ? { text: "Recurring — bill?", cls: "text-amber bg-amber/10" } : null;
+          return (
+            <button key={m.key} onClick={() => setPick(m)} className="w-full text-left px-4 py-3 border-b border-line-soft last:border-b-0 hover:bg-surface/60 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center">
+              <div className="min-w-0 text-[14px] font-semibold truncate">{m.name}</div>
+              <div className="text-[14px] font-bold text-right">{money(m.total)}</div>
+              <div className="min-w-0 flex items-center gap-1.5 text-[11px] text-muted">
+                {badge && <span className={cx("shrink-0 text-[10px] font-semibold rounded px-1.5 py-0.5", badge.cls)}>{badge.text}</span>}
+                <span className="truncate">{catName(m.category)} · {m.accountIds.length === 1 ? acctName(m.accountIds[0]) : `${m.accountIds.length} accounts`}{m.merged.length ? ` · +${m.merged.length} merged` : ""}</span>
               </div>
-              <div className="text-[13px] font-bold shrink-0">{money(m.total)}</div>
-            </div>
-            <div className="mt-1.5 h-1.5 rounded-full bg-line-soft overflow-hidden"><div className={cx("h-full rounded-full", m.kind === "bill" ? "bg-accent" : m.kind === "transfer" ? "bg-chip" : "bg-ink")} style={{ width: `${Math.max(2, (m.total / max) * 100)}%` }} /></div>
-          </button>
-        ))}
+              <div className="text-[11px] text-muted text-right whitespace-nowrap">{m.count}× · {money(m.perMonth)}/mo</div>
+              <div className="col-span-2 h-1 rounded-full bg-line-soft overflow-hidden"><div className={cx("h-full rounded-full", m.kind === "bill" ? "bg-accent" : m.kind === "transfer" ? "bg-chip" : "bg-ink")} style={{ width: `${Math.max(2, (m.total / max) * 100)}%` }} /></div>
+            </button>
+          );
+        })}
       </Card>
       {pick && <ItemSheet merchantKey={pick.key} onClose={() => setPick(null)} />}
+    </>
+  );
+}
+
+
+/* ------------------------------ Everyday ------------------------------ */
+
+/**
+ * Everything that leaves your pocket that isn't a bill or a transfer — the "everyday" number the plan uses —
+ * broken down by category and merchant so it can be organized until it reads true.
+ */
+function EverydayView({ today }: { today: Date }) {
+  const { data: d, update } = useHome();
+  const data = d!;
+  const [span, setSpan] = useState<"3m" | "6m" | "12m">("3m");
+  const monthsBack = span === "3m" ? 3 : span === "6m" ? 6 : 12;
+  // Previous N full months plus this month so far; the average counts this month as the fraction that has passed.
+  const end = ymd(today);
+  const from = ymd(addMonths(startOfMonth(today), -monthsBack));
+  const span_ = monthsBack + today.getDate() / getDaysInMonth(today);
+  const all = useMemo(() => merchantSummaries(data, from, end), [data, from, end]);
+  const spend = all.filter((m) => m.kind === "spend");
+  const total = spend.reduce((s, m) => s + m.total, 0);
+  const perMonth = Math.round(total / span_);
+  const estimate = data.settings.everydaySpend;
+  const catName = (id: string) => data.budgets.find((b) => b.id === id)?.name ?? "Uncategorized";
+  const groups = useMemo(() => {
+    const g = new Map<string, MerchantSummary[]>();
+    for (const m of spend) (g.get(m.category) ?? g.set(m.category, []).get(m.category)!).push(m);
+    return [...g.entries()].map(([id, ms]) => ({ id, name: catName(id), total: ms.reduce((s, m) => s + m.total, 0), merchants: ms.sort((a, b) => b.total - a.total), budget: data.budgets.find((b) => b.id === id)?.limit })).sort((a, b) => b.total - a.total);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spend]);
+  const [open, setOpen] = useState<string | null>(groups[0]?.id ?? null);
+  const [pick, setPick] = useState<string | null>(null);
+  const setEstimate = () => update((h) => ({ ...h, settings: { ...h.settings, everydaySpend: perMonth } }), `everyday estimate set to ${perMonth}`);
+  const maxCat = Math.max(1, ...groups.map((g) => g.total));
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-[13px] text-muted leading-snug max-w-xl">Everything that isn&apos;t a bill or a transfer — groceries, gas, dining, shopping, the one-offs. This is what the plan calls <b>everyday spending</b>. Tap a merchant to re-categorize it, make it a bill, or call it a transfer.</div>
+        <div className="w-56"><Segmented size="sm" value={span} onChange={setSpan} options={[{ id: "3m", label: "3 mo" }, { id: "6m", label: "6 mo" }, { id: "12m", label: "12 mo" }]} /></div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        <Card className="p-3"><div className="text-[11px] text-muted">Actual, per month</div><div className="text-[17px] font-bold">{money(perMonth)}</div><div className="text-[11px] text-muted">last {monthsBack} months + this month so far</div></Card>
+        <Card className="p-3"><div className="text-[11px] text-muted">In the plan</div><div className="text-[17px] font-bold">{money(estimate)}</div><div className={cx("text-[11px] font-semibold", estimate < perMonth ? "text-red" : "text-green")}>{estimate < perMonth ? `${money(perMonth - estimate)}/mo under-planned` : estimate > perMonth ? `${money(estimate - perMonth)}/mo cushion` : "matches"}</div></Card>
+        <Card className="p-3"><div className="text-[11px] text-muted">Places</div><div className="text-[17px] font-bold">{spend.length}</div><div className="text-[11px] text-muted">{groups.length} categor{groups.length === 1 ? "y" : "ies"}</div></Card>
+        <Card className="p-3 flex flex-col justify-between"><div className="text-[11px] text-muted">Make the plan match</div><Button onClick={setEstimate} disabled={perMonth === estimate || perMonth === 0} className="h-9 text-xs mt-1">Set everyday to {money(perMonth)}/mo</Button></Card>
+      </div>
+
+      {groups.length === 0 && <Card className="p-4 text-sm text-muted">No everyday spending recorded in this window yet.</Card>}
+      {groups.map((g) => (
+        <Card key={g.id} className="overflow-hidden">
+          <button onClick={() => setOpen(open === g.id ? null : g.id)} aria-expanded={open === g.id} className="w-full text-left px-4 py-3 flex flex-col gap-1.5 hover:bg-surface/40">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 min-w-0"><div className="text-sm font-semibold">{g.name}{g.id === "other" && <span className="ml-2 text-[10px] font-semibold text-amber bg-amber/10 rounded px-1.5 py-0.5">needs sorting</span>}</div><div className="text-[11px] text-muted">{g.merchants.length} place{g.merchants.length === 1 ? "" : "s"} · {money(Math.round(g.total / span_))}/mo{g.budget ? ` · budget ${money(g.budget)}/mo` : ""}</div></div>
+              <div className="text-sm font-bold">{money(g.total)}</div>
+              <ChevronRight size={15} className={cx("text-muted transition-transform", open === g.id && "rotate-90")} />
+            </div>
+            <div className="h-1.5 rounded-full bg-line-soft overflow-hidden"><div className={cx("h-full rounded-full", g.budget && g.total / span_ > g.budget ? "bg-red" : "bg-accent")} style={{ width: `${Math.max(2, (g.total / maxCat) * 100)}%` }} /></div>
+          </button>
+          {open === g.id && (
+            <div className="border-t border-line-soft">
+              {g.merchants.map((m) => (
+                <button key={m.key} onClick={() => setPick(m.key)} className="w-full text-left flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0 hover:bg-surface/60">
+                  <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold truncate">{m.name}{m.recurring && <span className="ml-2 text-[10px] font-semibold text-amber bg-amber/10 rounded px-1.5 py-0.5">recurring · bill?</span>}</div><div className="text-[11px] text-muted truncate">{m.count}× · {money(Math.round(m.total / span_))}/mo · {m.accountIds.map((id) => data.accounts.find((a) => a.id === id)?.name ?? "—").join(", ")}</div></div>
+                  <div className="text-[13px] font-semibold">{money(m.total)}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+      ))}
+      {pick && <ItemSheet merchantKey={pick} onClose={() => setPick(null)} />}
     </>
   );
 }
