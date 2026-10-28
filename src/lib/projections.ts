@@ -28,7 +28,10 @@ export interface PeriodRange { period: Period; from: Date; to: Date; label: stri
 /** The two days of the month a period starts on: [1, split+1] for halves, or the paydays (first two) when periods follow paychecks. */
 export function periodStarts(data: HomeData): [number, number] {
   if (data.pay.periodMode === "paydays") {
-    const days = [...new Set(expectedPayDays(data))].filter((d) => d >= 1 && d <= 31).sort((a, b) => a - b);
+    // The paydays typed in Settings win (they're the contract dates); detected deposit days are the fallback, since
+    // deposits often post a day early and would shift every period.
+    const typed = (data.pay.payDays ?? []).filter((d) => d >= 1 && d <= 31);
+    const days = [...new Set(typed.length ? typed : expectedPayDays(data))].filter((d) => d >= 1 && d <= 31).sort((a, b) => a - b);
     if (days.length >= 2) return [days[0], days[1]];
     if (days.length === 1) return [days[0], days[0]]; // one payday a month: a single period (b is empty)
   }
