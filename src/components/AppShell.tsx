@@ -49,6 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [booted, setBooted] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ homeId: string; name: string; purgeAt: string } | null>(null);
 
   // Pick the storage adapter once: Supabase when configured + signed in, else local.
   useEffect(() => {
@@ -61,6 +62,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         const { data: members, error: mErr } = await sb.from("home_members").select("home_id").limit(1);
         if (mErr) { setBootError(`Couldn't read your home: ${mErr.message}`); setBooted(true); return; }
         let homeId = members?.[0]?.home_id as string | undefined;
+        if (homeId) {
+          const { data: home } = await sb.from("homes").select("name, deleted_at").eq("id", homeId).maybeSingle();
+          if (home?.deleted_at) { setPendingDelete({ homeId, name: home.name, purgeAt: new Date(new Date(home.deleted_at).getTime() + 30 * 86_400_000).toISOString() }); setBooted(true); return; }
+        }
         if (!homeId) {
           const { data: created, error: cErr } = await sb.rpc("create_home", { p_name: "My home", p_display_name: user.user_metadata?.name ?? null });
           if (cErr) { setBootError(`Couldn't create a home: ${cErr.message}`); setBooted(true); return; }
@@ -75,6 +80,19 @@ export function AppShell({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (pendingDelete) {
+    const restore = async () => { const sb = createClient(); const { error } = await sb.rpc("cancel_home_deletion", { p_home: pendingDelete.homeId }); if (error) { setBootError(error.message); return; } location.reload(); };
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <Card className="max-w-md p-6 flex flex-col gap-3 text-center items-center">
+          <div className="text-lg font-bold">“{pendingDelete.name}” is scheduled for deletion</div>
+          <div className="text-sm text-muted">Everything is still here, untouched, until <b className="text-ink">{new Date(pendingDelete.purgeAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</b>. After that it&apos;s gone for good — bank links disconnected, every transaction and setting erased.</div>
+          <Button onClick={restore}>Restore my home</Button>
+          <div className="text-[11px] text-muted">Changed your mind later? Sign in any time before that date.</div>
+        </Card>
+      </div>
+    );
+  }
   if (bootError) {
     return <div className="flex-1 flex items-center justify-center p-6 text-sm text-red text-center max-w-md mx-auto">{bootError}<br /><span className="text-muted">Try reloading; if it persists, check Supabase RLS / function grants.</span></div>;
   }

@@ -105,6 +105,28 @@ export default function SettingsPage() {
             </label>
           </div>
 
+          <Card className="p-4 flex flex-col gap-2">
+            <div className="text-[13px] font-semibold">Your history stays yours</div>
+            <div className="text-[12px] text-muted leading-relaxed">Banks hand over up to 24 months when you first connect, and from then on every new transaction is added and kept. Nothing ages out — in two years you&apos;ll have four years of history, in five you&apos;ll have seven. Export JSON any time for your own copy.</div>
+          </Card>
+
+          {adapter.kind === "supabase" && (
+            <Card className="p-4 flex flex-col gap-2 border-red/30">
+              <div className="text-[13px] font-semibold text-red">Delete this home</div>
+              <div className="text-[12px] text-muted leading-relaxed">We hold everything for <b className="text-ink">30 days</b> — sign in during that time and tap Restore and nothing is lost. After 30 days the home, its history, settings and bank links are permanently erased from our systems.</div>
+              <Button variant="danger" className="self-start h-9 text-xs" onClick={async () => {
+                if (!confirm("Schedule this home for deletion? You have 30 days to restore it by signing in.")) return;
+                const sb = createClient();
+                const { data: members } = await sb.from("home_members").select("home_id").limit(1);
+                const homeId = members?.[0]?.home_id as string | undefined;
+                if (!homeId) return;
+                const { error } = await sb.rpc("request_home_deletion", { p_home: homeId });
+                if (error) { alert(error.message); return; }
+                location.reload();
+              }}>Delete home…</Button>
+            </Card>
+          )}
+
           <Eyebrow className="pt-1.5">Preferences</Eyebrow>
           <Card>
             <Row onClick={() => setPayOpen(true)} title="Pay schedule (fallback)" sub={(data.incomeSources?.length ?? 0) > 0 ? `Projections use your Income sources · split at the ${data.pay.splitDay}th` : `$${data.pay.monthlyIncome.toLocaleString()}/mo · paid on the ${data.pay.payDays.join(" & ")} · split at the ${data.pay.splitDay}th`} rightSub="edit ›" />
