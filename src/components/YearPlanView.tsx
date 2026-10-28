@@ -4,7 +4,8 @@ import { Flag, Plus, Target } from "lucide-react";
 import { STRATEGIES } from "@/lib/strategies";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Field, Modal, cx, inputCls, money, selectCls } from "./ui";
-import { buildYearPlan } from "@/lib/yearplan";
+import { buildYearPlan, type PlanMonth } from "@/lib/yearplan";
+import { PlanBreakdown, type BreakdownKind } from "./PlanBreakdown";
 import type { Landmark, StrategyId, YearTargets } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
 
@@ -14,6 +15,8 @@ export function YearPlanView({ today }: { today: Date }) {
   const [year, setYear] = useState(today.getFullYear());
   const [withStart, setWithStart] = useState(true);
   const [editing, setEditing] = useState<Landmark | "new" | null>(null);
+  const [breakdown, setBreakdown] = useState<{ month: PlanMonth; kind: BreakdownKind } | null>(null);
+  const cell = (m: PlanMonth, kind: BreakdownKind, cls: string, label: string) => <td className={cx("px-0 py-0", cls)}><button onClick={() => setBreakdown({ month: m, kind })} className="w-full h-full px-3 py-2 text-right hover:bg-surface/70 underline decoration-dotted decoration-line underline-offset-2">{label}</button></td>;
   const yp = buildYearPlan(data, year, today, withStart);
   const t = yp.totals;
   const maxAbs = Math.max(1, ...yp.months.map((m) => Math.abs(m.pocket)));
@@ -41,7 +44,7 @@ export function YearPlanView({ today }: { today: Date }) {
           <Button onClick={() => setEditing("new")} className="h-10"><Plus size={14} className="inline -mt-0.5 mr-1" />Landmark</Button>
         </div>
       </div>
-      <div className="text-[13px] text-muted leading-snug">{isThisYear ? <>Months that already happened use what the bank recorded ({yp.toDate.months} so far: {money(yp.toDate.income)} in, {money(yp.toDate.spending)} out). The rest of {year} is the plan: </> : <>Every month of {year} uses the plan: </>}expected income {money(yp.months[11].income)}/mo · bills {money(yp.months[11].bills)}/mo · everyday {money(yp.months[11].everyday)}/mo, plus your landmarks.</div>
+      <div className="text-[13px] text-muted leading-snug">{isThisYear ? <>Months that already happened use what the bank recorded ({yp.toDate.months} so far: {money(yp.toDate.income)} in, {money(yp.toDate.spending)} out). The rest of {year} is the plan: </> : <>Every month of {year} uses the plan: </>}<button onClick={() => setBreakdown({ month: yp.months[11], kind: "income" })} className="text-accent font-semibold underline decoration-dotted">income {money(yp.months[11].income)}/mo</button> · <button onClick={() => setBreakdown({ month: yp.months[11], kind: "outgo" })} className="text-accent font-semibold underline decoration-dotted">bills {money(yp.months[11].bills)}/mo + everyday {money(yp.months[11].everyday)}/mo</button> · <button onClick={() => setBreakdown({ month: yp.months[11], kind: "debt" })} className="text-accent font-semibold underline decoration-dotted">extra toward debt {money(data.settings.extraPayment)}/mo</button>, plus your landmarks. Tap any number to see what&apos;s behind it.</div>
 
       {/* Strategy + targets: how you want the year to go */}
       <Card className="p-4 flex flex-col gap-3">
@@ -62,8 +65,8 @@ export function YearPlanView({ today }: { today: Date }) {
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
         <Kpi dark label={`In your pocket · end of ${year}`} value={money(t.pocketEnd)} sub={targets.pocket !== undefined ? `target ${money(targets.pocket)} · ${t.pocketEnd >= targets.pocket ? "on track" : `${money(targets.pocket - t.pocketEnd)} short`}` : withStart ? `starts from ${money(yp.startBalance)} checking` : "from $0"} tone={t.pocketEnd < 0 ? "red" : gap(targets.pocket, t.pocketEnd, true)} />
-        <Kpi label="Income" value={money(t.income)} sub={targets.income !== undefined ? `target ${money(targets.income)}` : isThisYear ? `${money(yp.toDate.income)} so far` : `${money(t.income / 12)}/mo expected`} tone={gap(targets.income, t.income, true)} />
-        <Kpi label="Spending" value={money(t.spending)} sub={targets.spending !== undefined ? `cap ${money(targets.spending)}` : `bills ${money(t.bills)} · everyday ${money(t.everyday)}`} tone={gap(targets.spending, t.spending, false)} />
+        <Kpi onClick={() => setBreakdown({ month: yp.months[Math.max(0, isThisYear ? today.getMonth() : 0)], kind: "income" })} label="Income" value={money(t.income)} sub={targets.income !== undefined ? `target ${money(targets.income)}` : isThisYear ? `${money(yp.toDate.income)} so far` : `${money(t.income / 12)}/mo expected`} tone={gap(targets.income, t.income, true)} />
+        <Kpi onClick={() => setBreakdown({ month: yp.months[Math.max(0, isThisYear ? today.getMonth() : 0)], kind: "outgo" })} label="Spending" value={money(t.spending)} sub={targets.spending !== undefined ? `cap ${money(targets.spending)}` : `bills ${money(t.bills)} · everyday ${money(t.everyday)}`} tone={gap(targets.spending, t.spending, false)} />
         <Kpi label={`Debt remaining · Dec ${year}`} value={money(t.debtEnd)} sub={targets.debt !== undefined ? `target ${money(targets.debt)}` : t.debtStart > 0 ? `${money(t.debtPaid)} paid down from ${money(t.debtStart)}` : "no debt tracked"} tone={t.debtEnd === 0 && t.debtStart > 0 ? "green" : gap(targets.debt, t.debtEnd, false)} />
         <Kpi label="Purposed" value={money(t.landmarks)} sub={`${t.landmarkCount} landmark${t.landmarkCount === 1 ? "" : "s"} you set`} tone="amber" />
       </div>
@@ -92,10 +95,10 @@ export function YearPlanView({ today }: { today: Date }) {
             {yp.months.map((m) => (
               <tr key={m.key} className="border-b border-line-soft last:border-b-0 align-top">
                 <td className="px-3 py-2"><div className="font-semibold">{m.name} {year} {m.source === "actual" && <span className="text-[9px] font-semibold text-accent bg-accent-bg rounded px-1 py-0.5 align-middle">actual</span>}{m.source === "blend" && <span className="text-[9px] font-semibold text-amber bg-amber-bg rounded px-1 py-0.5 align-middle">so far + plan</span>}</div>{m.landmarks.map((l) => <button key={l.id} onClick={() => setEditing(l)} className="block text-[11px] text-amber font-semibold hover:underline text-left">⚑ {l.name} · {l.amount < 0 ? "+" : ""}{money(Math.abs(l.amount))}{l.amount < 0 ? " in" : ""}</button>)}</td>
-                <td className="px-3 py-2 text-right text-green">{money(m.income)}</td>
-                <td className="px-3 py-2 text-right">{money(m.bills + m.everyday)}</td>
-                <td className="px-3 py-2 text-right">{m.debtExtra ? money(m.debtExtra) : "—"}</td>
-                <td className={cx("px-3 py-2 text-right", m.landmarkTotal > 0 ? "text-amber font-semibold" : m.landmarkTotal < 0 ? "text-green font-semibold" : "text-muted")}>{m.landmarkTotal ? money(m.landmarkTotal) : "—"}</td>
+                {cell(m, "income", "text-green", money(m.income))}
+                {cell(m, "outgo", "", money(m.bills + m.everyday))}
+                {cell(m, "debt", "", m.debtExtra ? money(m.debtExtra) : "—")}
+                {cell(m, "landmarks", m.landmarkTotal > 0 ? "text-amber font-semibold" : m.landmarkTotal < 0 ? "text-green font-semibold" : "text-muted", m.landmarkTotal ? money(m.landmarkTotal) : "—")}
                 <td className={cx("px-3 py-2 text-right font-semibold", m.net < 0 ? "text-red" : "")}>{money(m.net)}</td>
                 <td className={cx("px-3 py-2 text-right font-bold", m.pocket < 0 ? "text-red" : "")}>{money(m.pocket)}</td>
                 <td className="px-3 py-2 text-right text-muted">{money(m.debtRemaining)}</td>
@@ -118,6 +121,7 @@ export function YearPlanView({ today }: { today: Date }) {
       </Card>
       <Button variant="dashed" onClick={() => setEditing("new")}>+ Add a landmark for {year}</Button>
 
+      {breakdown && <PlanBreakdown month={breakdown.month} kind={breakdown.kind} onClose={() => setBreakdown(null)} onEditLandmark={(id) => { const l = (data.landmarks ?? []).find((x) => x.id === id); if (l) setEditing(l); }} />}
       {editing && <LandmarkForm year={year} lm={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={save} onRemove={remove} />}
     </div>
   );
@@ -125,8 +129,8 @@ export function YearPlanView({ today }: { today: Date }) {
 
 const short = (n: number) => (Math.abs(n) >= 1000 ? `${n < 0 ? "−" : ""}$${(Math.abs(n) / 1000).toFixed(1).replace(/\.0$/, "")}k` : money(n));
 
-const Kpi = ({ label, value, sub, dark, tone }: { label: string; value: string; sub?: string; dark?: boolean; tone?: "red" | "green" | "amber" }) => (
-  <div className={cx("rounded-[14px] border p-3 flex flex-col gap-0.5 min-w-0", dark ? "bg-ink border-ink text-white" : "bg-card border-line")}>
+const Kpi = ({ label, value, sub, dark, tone, onClick }: { label: string; value: string; sub?: string; dark?: boolean; tone?: "red" | "green" | "amber"; onClick?: () => void }) => (
+  <div role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined} onClick={onClick} onKeyDown={(e) => onClick && e.key === "Enter" && onClick()} className={cx("rounded-[14px] border p-3 flex flex-col gap-0.5 min-w-0", dark ? "bg-ink border-ink text-white" : "bg-card border-line", onClick && "cursor-pointer hover:border-field")}>
     <div className={cx("text-[11px]", dark ? "text-muted-3" : "text-muted")}>{label}</div>
     <div className={cx("text-[18px] font-bold truncate", tone === "red" && "text-red", tone === "green" && "text-green", tone === "amber" && "text-amber")}>{value}</div>
     {sub && <div className={cx("text-[10px] truncate", dark ? "text-muted-3" : "text-muted")}>{sub}</div>}
