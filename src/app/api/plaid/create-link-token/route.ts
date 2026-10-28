@@ -14,7 +14,10 @@ export async function POST(req: Request) {
     const r = await plaid().linkTokenCreate({
       user: { client_user_id: ctx.user.id },
       client_name: "HomeFin",
-      products: [Products.Transactions, Products.Liabilities],
+      // Transactions is required; Liabilities (card APRs, loan terms) only where the bank has one — asking for it as a
+      // required product makes Plaid refuse banks where you only hold checking/savings ("No liability accounts").
+      products: [Products.Transactions],
+      optional_products: [Products.Liabilities],
       country_codes: [CountryCode.Us],
       language: "en",
       transactions: { days_requested: days },
