@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, CalendarDays, CalendarCheck, CreditCard, Home, Settings, TrendingUp, Cloud, CloudOff, Loader2, Wallet } from "lucide-react";
+import { BarChart3, CalendarDays, CalendarCheck, CreditCard, Home, Settings, TrendingUp, Cloud, CloudOff, Loader2, Wallet, LayoutGrid } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
 import { SupabaseAdapter } from "@/lib/storage/supabase";
@@ -92,6 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="w-8 h-8 rounded-[9px] bg-ink flex items-center justify-center"><Home size={16} className="text-teal" /></div>
           <div className="font-bold text-[15px] tracking-tight">HomeFin</div>
         </Link>
+        {process.env.NEXT_PUBLIC_HUB_HOST && <a href={`https://${process.env.NEXT_PUBLIC_HUB_HOST}`} className="flex items-center gap-2 px-2 -mt-3 text-[11px] font-semibold text-muted hover:text-accent"><LayoutGrid size={13} /> All our apps</a>}
         <nav className="flex flex-col gap-1" aria-label="Main">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? path === "/" : path.startsWith(href);

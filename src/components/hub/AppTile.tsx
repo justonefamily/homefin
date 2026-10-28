@@ -1,7 +1,7 @@
 "use client";
 import { ArrowUpRight } from "lucide-react";
-import type { HubApp } from "@/lib/types";
-import { cx } from "./ui";
+import type { HubApp } from "@/lib/hubTypes";
+import { cx } from "@/components/ui";
 
 const BADGE: Record<HubApp["status"], string | null> = { live: null, beta: "Beta", soon: "Coming soon", hidden: "Hidden" };
 

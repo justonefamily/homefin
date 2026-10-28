@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "./supabase/client";
-import type { HubApp, Me } from "./types";
+import type { HubApp, Me } from "./hubTypes";
 
 /** Who's signed in, whether they're invited (a member of any home) and whether they curate the store (owner). */
 export function useMe() {
@@ -33,4 +33,4 @@ export function useApps() {
   return { apps, error, reload };
 }
 
-export const signOut = async () => { await createClient().auth.signOut(); location.href = "/login"; };
+export const signOut = async () => { await createClient().auth.signOut(); location.href = "/login?next=/"; };

@@ -2,12 +2,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
-import { Shell } from "@/components/Shell";
-import { AppTile } from "@/components/AppTile";
+import { Shell } from "@/components/hub/Shell";
+import { AppTile } from "@/components/hub/AppTile";
 import { useApps } from "@/lib/hub";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, Field, Modal, cx, inputCls, selectCls } from "@/components/ui";
-import type { HubApp } from "@/lib/types";
+import type { HubApp } from "@/lib/hubTypes";
 
 const blank: Omit<HubApp, "id"> = { slug: "", name: "", tagline: "", description: "", url: "https://", icon: "✨", color: "#0e6b74", status: "soon", sort: 100 };
 

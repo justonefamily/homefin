@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { Shell } from "@/components/Shell";
-import { AppTile } from "@/components/AppTile";
+import { Shell } from "@/components/hub/Shell";
+import { AppTile } from "@/components/hub/AppTile";
 import { useApps } from "@/lib/hub";
 import { Card } from "@/components/ui";
 
@@ -23,7 +23,7 @@ export default function HubPage() {
               <div className="text-sm text-muted mt-1">Everything we&apos;ve built for the family, one login for all of it.</div>
             </div>
             {error && <Card className="p-4 text-sm text-red">Couldn&apos;t load the apps: {error}</Card>}
-            {apps && visible.length === 0 && <Card className="p-6 text-sm text-muted text-center">Nothing here yet.{me.owner && <> <Link href="/admin" className="text-accent font-semibold">Add the first app</Link>.</>}</Card>}
+            {apps && visible.length === 0 && <Card className="p-6 text-sm text-muted text-center">Nothing here yet.{me.owner && <> <Link href="/hub/admin" className="text-accent font-semibold">Add the first app</Link>.</>}</Card>}
             {live.length > 0 && (
               <div className="flex flex-col gap-3">
                 {live[0] && <AppTile app={live[0]} large />}

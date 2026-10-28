@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, Settings2, Loader2 } from "lucide-react";
 import { signOut, useMe } from "@/lib/hub";
-import { Button } from "./ui";
+import { Button } from "@/components/ui";
 
 export function Shell({ children, admin }: { children: (me: NonNullable<ReturnType<typeof useMe>>) => React.ReactNode; admin?: boolean }) {
   const me = useMe();
@@ -29,12 +29,12 @@ export function Shell({ children, admin }: { children: (me: NonNullable<ReturnTy
       <header className="sticky top-0 z-10 bg-surface/85 backdrop-blur border-b border-line">
         <div className="mx-auto w-full max-w-5xl px-5 h-14 flex items-center gap-3">
           <Link href="/" className="flex items-center gap-2.5">
-            <img src="/icon.svg" alt="" className="w-8 h-8 rounded-[9px]" />
+            <img src="/hub-icon.svg" alt="" className="w-8 h-8 rounded-[9px]" />
             <div className="font-extrabold tracking-tight text-[15px]">Just One Family</div>
           </Link>
           <div className="ml-auto flex items-center gap-1.5 text-[12px] text-muted">
             <span className="hidden sm:inline">{me.name}</span>
-            {me.owner && <Link href="/admin" className="w-9 h-9 rounded-[10px] flex items-center justify-center hover:bg-card" aria-label="Manage apps"><Settings2 size={17} /></Link>}
+            {me.owner && <Link href="/hub/admin" className="w-9 h-9 rounded-[10px] flex items-center justify-center hover:bg-card" aria-label="Manage apps"><Settings2 size={17} /></Link>}
             <button onClick={signOut} className="w-9 h-9 rounded-[10px] flex items-center justify-center hover:bg-card" aria-label="Sign out"><LogOut size={17} /></button>
           </div>
         </div>
