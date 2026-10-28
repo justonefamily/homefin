@@ -137,7 +137,7 @@ export default function HomePage() {
           <div className="grid grid-cols-3 gap-2.5">
             <Quick href="/accounts" icon={<CreditCard size={20} className="text-accent" />} label="Accounts" />
             <Quick href="/plan?view=budget" icon={<BarChart3 size={20} className="text-accent" />} label="Budget" />
-            <Quick href="/plan?view=year" icon={<CalendarDays size={20} className="text-accent" />} label={`${today.getFullYear() + 1} plan`} />
+            <Quick href="/plan?view=year" icon={<CalendarDays size={20} className="text-accent" />} label="Year plan" />
           </div>
         </div>
       </div>

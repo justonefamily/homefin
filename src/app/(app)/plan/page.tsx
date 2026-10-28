@@ -28,7 +28,7 @@ export default function PlanPage() {
   return (
     <>
       <h1 className="text-2xl font-bold tracking-tight">Plan</h1>
-      <div className="md:max-w-md"><Segmented value={view} onChange={setView} options={[{ id: "strategy", label: "Strategy" }, { id: "budget", label: "Budget" }, { id: "year", label: `${today.getFullYear() + 1} plan` }]} /></div>
+      <div className="md:max-w-md"><Segmented value={view} onChange={setView} options={[{ id: "strategy", label: "Strategy" }, { id: "budget", label: "Budget" }, { id: "year", label: "Year plan" }]} /></div>
 
       {view === "strategy" && (
         <div className="md:grid md:grid-cols-12 md:gap-6 flex flex-col gap-4">

@@ -1,4 +1,5 @@
 import type { HomeData } from "./types";
+import { spendItems } from "./actuals";
 
 /**
  * Comparisons: "this time this year vs. this time last year", or anything the user
@@ -77,7 +78,8 @@ export interface Comparison {
 export function compare(data: HomeData, metric: MetricId, a: PeriodRef, b: PeriodRef): Comparison {
   const mA = monthsIn(a), mB = monthsIn(b);
   const rows: MetricRow[] = [];
-  const spend = (months: string[], cat?: string) => data.transactions.filter((t) => inMonths(t.date, months) && (!cat || t.category === cat)).reduce((s, t) => s + t.amount, 0);
+  // Everyday spending only (bills have their own metric); transfers, hidden and reimbursable never count; refunds come off.
+  const spend = (months: string[], cat?: string) => spendItems(data, months).filter((i) => i.kind === "spend" && (!cat || i.category === cat)).reduce((s, i) => s + i.amount, 0);
   const billsPaid = (months: string[]) => data.payments.filter((p) => months.includes(p.month)).reduce((s, p) => s + p.amount, 0);
   const income = (months: string[]) => {
     const ev = (data.income ?? []).filter((i) => inMonths(i.date, months) && (i.status === "counted" || i.sourceId));
@@ -89,8 +91,8 @@ export function compare(data: HomeData, metric: MetricId, a: PeriodRef, b: Perio
   if (metric === "spending") {
     for (const c of data.budgets) rows.push({ id: c.id, name: c.name, a: spend(mA, c.id), b: spend(mB, c.id) });
     const known = new Set(data.budgets.map((c) => c.id));
-    const otherA = data.transactions.filter((t) => inMonths(t.date, mA) && !known.has(t.category)).reduce((s, t) => s + t.amount, 0);
-    const otherB = data.transactions.filter((t) => inMonths(t.date, mB) && !known.has(t.category)).reduce((s, t) => s + t.amount, 0);
+    const other = (months: string[]) => spendItems(data, months).filter((i) => i.kind === "spend" && !known.has(i.category)).reduce((s, i) => s + i.amount, 0);
+    const otherA = other(mA), otherB = other(mB);
     if (otherA || otherB) rows.push({ id: "other", name: "Other", a: otherA, b: otherB });
   } else if (metric === "bills") {
     rows.push({ id: "bills", name: "Bills paid", a: billsPaid(mA), b: billsPaid(mB) });

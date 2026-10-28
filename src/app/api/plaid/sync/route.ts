@@ -62,13 +62,23 @@ export async function POST() {
     }
     // 3) Transactions — may not be ready yet on a brand-new item
     try {
-      let cursor = it.cursor ?? undefined;
-      let more = true;
-      while (more) {
-        const r = await client.transactionsSync({ access_token: it.access_token, cursor });
-        const merged = mergeTransactions(home, r.data.added, r.data.removed.map((x) => x.transaction_id!));
-        home = merged.home; txCount += merged.added;
-        cursor = r.data.next_cursor; more = r.data.has_more;
+      // Plaid asks us to restart from the last saved cursor if its data moves mid-pagination; do that up to 3 times.
+      let attempts = 0, cursor = it.cursor ?? undefined;
+      for (;;) {
+        try {
+          let c = cursor; let more = true; let staged = home; let added = 0;
+          while (more) {
+            const r = await client.transactionsSync({ access_token: it.access_token, cursor: c });
+            const merged = mergeTransactions(staged, r.data.added, r.data.removed.map((x) => x.transaction_id!));
+            staged = merged.home; added += merged.added;
+            c = r.data.next_cursor; more = r.data.has_more;
+          }
+          home = staged; txCount += added; cursor = c;
+          break;
+        } catch (e) {
+          if (plaidError(e).code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION" && ++attempts < 3) continue;
+          throw e;
+        }
       }
       await admin.from("plaid_items").update({ cursor }).eq("id", it.id);
     } catch (e) {

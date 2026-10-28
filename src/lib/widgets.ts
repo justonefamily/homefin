@@ -1,3 +1,4 @@
+import { spendItems } from "./actuals";
 import { getDaysInMonth } from "date-fns";
 import type { HomeData } from "./types";
 import { budgetRows, debtsFromAccounts, monthKey, simulatePayoff, splitRows, strategyMeta } from "./strategies";
@@ -50,7 +51,7 @@ export const SCALARS: SourceDef<ScalarResult>[] = [
   { id: "bills-total", name: "Bills per month", group: "Cash flow", run: (d) => ({ value: sum(d.bills.map((b) => b.amount)), format: "money" }) },
   { id: "left-to-pay", name: "Left to pay this period", group: "Cash flow", run: (d, t) => { const p = currentPeriod(t, d.pay.splitDay); const s = billStatuses(d, t).filter((x) => inPeriod(x.dueDate.getDate(), p, d.pay.splitDay)); return { value: sum(s.filter((x) => !x.paid).map((x) => x.bill.amount)), format: "money", sub: `${s.filter((x) => x.paid).length} of ${s.length} paid` }; } },
   { id: "overdue", name: "Overdue bills", group: "Cash flow", run: (d, t) => { const s = billStatuses(d, t).filter((x) => x.overdue); return { value: sum(s.map((x) => x.bill.amount)), format: "money", sub: `${s.length} bill${s.length === 1 ? "" : "s"}` }; } },
-  { id: "spend-month", name: "Everyday spending this month", group: "Cash flow", run: (d, t) => { const m = monthKey(t); const c = compare(d, "spending", periodFor(t, "month"), sameTimeLastYear(periodFor(t, "month"))); return { value: sum(d.transactions.filter((x) => x.date.startsWith(m)).map((x) => x.amount)), format: "money", delta: c.bEmpty ? undefined : c.totalA - c.totalB, sub: c.bEmpty ? undefined : "vs same month last year" }; } },
+  { id: "spend-month", name: "Everyday spending this month", group: "Cash flow", run: (d, t) => { const m = monthKey(t); const c = compare(d, "spending", periodFor(t, "month"), sameTimeLastYear(periodFor(t, "month"))); return { value: sum(spendItems(d, [m]).filter((i) => i.kind === "spend").map((i) => i.amount)), format: "money", delta: c.bEmpty ? undefined : c.totalA - c.totalB, sub: c.bEmpty ? undefined : "vs same month last year" }; } },
   { id: "left-over", name: "Projected left over this month", group: "Cash flow", run: (d, t) => { const m = yearProjection(d, t)[t.getMonth()]; return { value: m.net, format: "money" }; } },
   { id: "week-end", name: "End of this week balance", group: "Cash flow", run: (d, t) => { const w = weeklyProjection(d, t).find((x) => x.state === "current"); return { value: w?.endBalance ?? 0, format: "money", sub: w?.label }; } },
   { id: "checking", name: "Checking balance", group: "Accounts", run: (d) => ({ value: sum(d.accounts.filter((a) => a.kind === "checking").map((a) => a.balance)), format: "money" }) },

@@ -30,6 +30,37 @@ export function actualsByDay(data: HomeData, monthKey: string): DayActual[] {
   return days;
 }
 
+/**
+ * One honest list of money out for a month, for anything that rolls up spending by category or bucket:
+ * every transaction with the household's decisions applied (merges, renamed, category overrides),
+ * transfers / hidden / reimbursable left out, refunds as negative lines. `kind` tells bills from everyday.
+ */
+export interface SpendItem { category: string; amount: number; kind: "bill" | "spend"; date: string }
+export function spendItems(data: HomeData, months: string[]): SpendItem[] {
+  const set = new Set(months);
+  const bills = billKeyMap(data);
+  const out: SpendItem[] = [];
+  for (const t of data.transactions) {
+    if (t.amount <= 0 || !set.has(t.date.slice(0, 7))) continue;
+    const c = classify(data, t, bills);
+    if (c.kind === "ignore" || c.kind === "transfer" || c.kind === "reimbursable") continue;
+    const pref = data.settings.merchants?.[c.key];
+    out.push({ category: pref?.category ?? c.bill?.category ?? t.category, amount: t.amount, kind: c.kind === "bill" ? "bill" : "spend", date: t.date });
+  }
+  for (const e of data.income ?? []) if (e.status === "refund" && set.has(e.date.slice(0, 7))) out.push({ category: "refund", amount: -e.amount, kind: "spend", date: e.date });
+  // Bills paid by hand (no bank transaction behind the payment) still count in their category.
+  const matched = new Set(out.filter((i) => i.kind === "bill").map((i) => i.date.slice(0, 7) + ":" + i.category));
+  for (const p of data.payments) {
+    if (!set.has(p.month)) continue;
+    const b = data.bills.find((x) => x.id === p.billId);
+    if (!b) continue;
+    const hasTx = data.transactions.some((t) => t.date.slice(0, 7) === p.month && classify(data, t, bills).bill?.id === b.id);
+    if (!hasTx) out.push({ category: b.category, amount: p.amount, kind: "bill", date: p.paidAt.slice(0, 10) });
+  }
+  void matched;
+  return out;
+}
+
 export interface MonthActual { income: number; bills: number; spend: number; days: number; hasData: boolean }
 
 /** Totals for a month (or for the month up to `throughDay`). */
