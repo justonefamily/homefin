@@ -105,7 +105,7 @@ export const Modal = ({ open, onClose, title, children }: { open: boolean; onClo
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink/40 p-0 sm:p-6" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="w-full sm:max-w-md bg-card rounded-t-[20px] sm:rounded-[20px] p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full sm:max-w-md bg-card rounded-t-[20px] sm:rounded-[20px] p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto [&>*]:shrink-0" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div className="text-base font-semibold">{title}</div>
           <button onClick={onClose} aria-label="Close" className="w-9 h-9 rounded-full hover:bg-surface flex items-center justify-center text-muted">✕</button>

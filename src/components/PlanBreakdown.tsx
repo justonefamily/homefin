@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { useItem } from "@/store/useItem";
 import { Modal, cx, money } from "./ui";
@@ -18,12 +20,19 @@ function Line({ name, sub, amount, onClick, tone }: { name: string; sub?: string
   const cls = "w-full flex items-center gap-3 px-3 py-2 border-b border-line-soft last:border-b-0 text-left";
   return onClick ? <button onClick={onClick} className={cx(cls, "hover:bg-surface/60")}>{inner}</button> : <div className={cls}>{inner}</div>;
 }
-const Group = ({ title, total, children }: { title: string; total?: number; children: React.ReactNode }) => (
-  <div className="rounded-[12px] border border-line overflow-hidden">
-    <div className="flex items-center justify-between px-3 py-2 text-[11px] font-semibold text-muted bg-surface border-b border-line"><span>{title}</span>{total !== undefined && <span>{money(total)}</span>}</div>
-    {children}
-  </div>
-);
+/** Collapsible section: closed by default so the sheet stays short; open ones scroll inside themselves. */
+function Group({ title, total, children, defaultOpen }: { title: string; total?: number; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  return (
+    <div className="rounded-[12px] border border-line overflow-hidden shrink-0">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-[12px] font-semibold bg-surface hover:bg-line-soft/60 text-left">
+        <span className="flex items-center gap-1.5"><ChevronRight size={14} className={cx("text-muted transition-transform", open && "rotate-90")} />{title}</span>
+        {total !== undefined && <span className="text-ink">{money(total)}</span>}
+      </button>
+      {open && <div className="border-t border-line max-h-72 overflow-y-auto">{children}</div>}
+    </div>
+  );
+}
 
 /** What's behind a number on the year plan — the sources (plan) or the bank's lines (actual) — with a way to change each. */
 export function PlanBreakdown({ month, kind, onClose, onEditLandmark }: { month: PlanMonth; kind: BreakdownKind; onClose: () => void; onEditLandmark: (id: string) => void }) {
@@ -42,11 +51,11 @@ export function PlanBreakdown({ month, kind, onClose, onEditLandmark }: { month:
 
       {kind === "income" && (
         <>
-          {actual && <Group title="Came in (counted deposits)" total={actual.income}>
+          {actual && <Group title="Came in (counted deposits)" total={actual.income} defaultOpen>
             {actual.incomeLines.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">Nothing counted yet this month.</div>}
             {actual.incomeLines.map((l) => <Line key={l.key} name={l.name} sub={`${l.count}× · ${new Date(l.date + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}${l.unreviewed ? " · unreviewed" : ""}`} amount={l.amount} tone="text-green" />)}
           </Group>}
-          {month.source !== "actual" && <Group title={month.source === "blend" ? "Plan for the rest of the month" : "Expected each month"} total={month.source === "blend" ? undefined : month.income}>
+          {month.source !== "actual" && <Group title={month.source === "blend" ? "Plan for the rest of the month" : "Expected each month"} total={month.source === "blend" ? undefined : month.income} defaultOpen={!actual}>
             {(data.incomeSources ?? []).length === 0 && <Line name="Monthly income from Settings" sub="No income source confirmed yet — this is the manual number. Confirm a paycheck on Bills → Income to make it real." amount={data.pay.monthlyIncome} />}
             {(data.incomeSources ?? []).map((s) => <Line key={s.id} name={s.name} sub={`${money(s.expected)} ${s.cadence}${s.payDays.length ? ` · around the ${s.payDays.map((d) => d + ord(d)).join(" & ")}` : ""}`} amount={monthlyOf(s.expected, s.cadence)} tone="text-green" />)}
           </Group>}
@@ -57,7 +66,7 @@ export function PlanBreakdown({ month, kind, onClose, onEditLandmark }: { month:
       {kind === "outgo" && (
         <>
           {actual && <>
-            <Group title="Bills paid" total={actual.bills}>
+            <Group title="Bills paid" total={actual.bills} defaultOpen>
               {actual.billLines.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">No bill payments recorded yet.</div>}
               {actual.billLines.map((l) => <Line key={l.key} name={l.name} sub={`${l.count}× · ${new Date(l.date + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`} amount={l.amount} onClick={() => openItem(l.key)} />)}
             </Group>
@@ -67,7 +76,7 @@ export function PlanBreakdown({ month, kind, onClose, onEditLandmark }: { month:
             </Group>
           </>}
           {month.source !== "actual" && <>
-            <Group title={month.source === "blend" ? "Bills still due after today" : "Bills"} total={(month.source === "blend" ? billsStillAhead(data, month.key, new Date()) : data.bills).reduce((s, b) => s + b.amount, 0)}>
+            <Group defaultOpen={!actual} title={month.source === "blend" ? "Bills still due after today" : "Bills"} total={(month.source === "blend" ? billsStillAhead(data, month.key, new Date()) : data.bills).reduce((s, b) => s + b.amount, 0)}>
               {data.bills.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">No bills set up yet.</div>}
               {month.source === "blend" && billsStillAhead(data, month.key, new Date()).length === 0 && data.bills.length > 0 && <div className="px-3 py-2 text-[12px] text-muted">Every bill is already paid or past its due day this month.</div>}
               {(month.source === "blend" ? billsStillAhead(data, month.key, new Date()) : data.bills.slice().sort((a, b) => a.dueDay - b.dueDay)).map((b) => <Line key={b.id} name={b.name} sub={`Due the ${b.dueDay}${ord(b.dueDay)} · ${data.budgets.find((c) => c.id === b.category)?.name ?? "Other"}${b.autopay ? " · autopay" : ""}`} amount={b.amount} onClick={() => openItem(b.merchant ?? b.name.toLowerCase())} />)}
@@ -82,7 +91,7 @@ export function PlanBreakdown({ month, kind, onClose, onEditLandmark }: { month:
 
       {kind === "debt" && (
         <>
-          <Group title="Settings" total={data.settings.extraPayment}>
+          <Group title="Settings" total={data.settings.extraPayment} defaultOpen>
             <Line name={`Extra toward debt each month`} sub={`Strategy: ${strategyMeta(data.settings.strategy).name} — ${strategyMeta(data.settings.strategy).headline}`} amount={data.settings.extraPayment} />
           </Group>
           <Group title="Debts it goes toward (balances today)">
@@ -94,7 +103,7 @@ export function PlanBreakdown({ month, kind, onClose, onEditLandmark }: { month:
       )}
 
       {kind === "landmarks" && (
-        <Group title="Landmarks this month" total={month.landmarkTotal}>
+        <Group title="Landmarks this month" total={month.landmarkTotal} defaultOpen>
           {month.landmarks.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">None this month.</div>}
           {month.landmarks.map((l) => <Line key={l.id} name={l.name} sub={`${l.amount < 0 ? "money in" : "money out"}${l.note ? ` · ${l.note}` : ""}`} amount={Math.abs(l.amount)} tone={l.amount < 0 ? "text-green" : "text-amber"} onClick={() => { onClose(); onEditLandmark(l.id); }} />)}
         </Group>
