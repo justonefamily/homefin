@@ -4,13 +4,12 @@ import { useSearchParams } from "next/navigation";
 import { FocusBoard } from "@/components/FocusBoard";
 import { Segmented } from "@/components/ui";
 import Link from "next/link";
-import { getDaysInMonth } from "date-fns";
 import { useHome } from "@/store/useHome";
 import { useItem } from "@/store/useItem";
 import { useToday } from "@/components/hooks";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { Card, Mark, Row, SectionTitle, cx, fmt, money } from "@/components/ui";
-import { billStatuses, currentPeriod, inPeriod, periodLabel, weeklyProjection } from "@/lib/projections";
+import { billsInRange, currentPeriodRange, periodRangeFor, shiftPeriod, weeklyProjection } from "@/lib/projections";
 import { debtsFromAccounts, simulatePayoff, strategyMeta } from "@/lib/strategies";
 import { CreditCard, BarChart3, CalendarDays, Sparkles } from "lucide-react";
 import { detectIncome, detectRecurring, expectedMonthlyIncome, matchIncomeEvents, merchantKey, suggestionToSource } from "@/lib/detect";
@@ -23,10 +22,10 @@ export default function HomePage() {
   const today = useToday();
   const params = useSearchParams();
   const [tab, setTab] = useState<"today" | "focus">(params.get("view") === "focus" ? "focus" : "today");
-  const [period, setPeriod] = useState(() => currentPeriod(today, data.pay.splitDay));
-  const dim = getDaysInMonth(today);
-
-  const statuses = billStatuses(data, today).filter((s) => inPeriod(s.dueDate.getDate(), period, data.pay.splitDay));
+  const [period, setPeriod] = useState(() => currentPeriodRange(data, today));
+  const periodChoices = [period, shiftPeriod(data, period, period.period === "a" ? 1 : -1)].sort((a, b) => a.from.getTime() - b.from.getTime());
+  void periodRangeFor;
+  const statuses = billsInRange(data, period, today);
   const total = statuses.reduce((s, b) => s + b.bill.amount, 0);
   const paid = statuses.filter((s) => s.paid).reduce((s, b) => s + b.bill.amount, 0);
   const pct = total ? Math.round((paid / total) * 100) : 0;
@@ -86,9 +85,9 @@ export default function HomePage() {
 
       <div className="md:grid md:grid-cols-12 md:gap-6 flex flex-col gap-4">
         <div className="md:col-span-5 flex flex-col gap-4">
-          <PeriodToggle value={period} onChange={setPeriod} splitDay={data.pay.splitDay} daysInMonth={dim} />
+          <PeriodToggle value={period} onChange={setPeriod} ranges={periodChoices} />
           <Card dark className="p-5 flex flex-col gap-3.5">
-            <div className="text-[11px] uppercase tracking-[0.06em] text-muted-3">This pay period · {periodLabel(today, period, data.pay.splitDay)}</div>
+            <div className="text-[11px] uppercase tracking-[0.06em] text-muted-3">This pay period · {period.label}</div>
             <div className="flex items-baseline gap-2"><div className="text-[34px] font-bold tracking-tight">{money(total - paid)}</div><div className="text-[13px] text-muted-3">left to pay</div></div>
             <div className="h-2 rounded-full bg-ink-2 overflow-hidden"><div className="h-2 rounded-full bg-teal" style={{ width: `${pct}%` }} /></div>
             <div className="grid grid-cols-3 gap-2">

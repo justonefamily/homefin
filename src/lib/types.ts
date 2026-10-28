@@ -91,8 +91,11 @@ export interface PaySchedule {
   monthlyIncome: number;
   /** Days of month paychecks land. [1, 16] = twice-monthly. */
   payDays: number[];
-  /** Pay-period boundary — the 1st–15th / 16th–end split. */
+  /** Pay-period boundary when periods are month halves — the 1st–15th / 16th–end split. */
   splitDay: number; // 15
+  /** "halves" (default): 1st–splitDay and splitDay+1–end. "paydays": each period starts on a payday and runs to the day before the next one
+   *  (paid the 15th and 30th → 15th–29th, then 30th–14th of next month). */
+  periodMode?: "halves" | "paydays";
 }
 
 export interface Settings {

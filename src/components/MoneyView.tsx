@@ -7,12 +7,14 @@ import { Button, Card, Eyebrow, Segmented, cx, inputCls, money } from "./ui";
 import { flowFor, merchantSummaries, mergeMerchants, similarMerchants, type FlowLine, type MerchantSummary } from "@/lib/merchants";
 import { ItemSheet } from "./ItemSheet";
 import { ymd } from "@/lib/calendar";
+import { currentPeriodRange, shiftPeriod } from "@/lib/projections";
+import type { HomeData } from "@/lib/types";
 import { brandColorFor } from "@/lib/brands";
 
 type Range = "week" | "period" | "month";
 
 /** Date range for an offset of weeks / pay periods / months from today. */
-function rangeFor(today: Date, kind: Range, offset: number, splitDay: number): { from: Date; to: Date; label: string } {
+function rangeFor(data: HomeData, today: Date, kind: Range, offset: number): { from: Date; to: Date; label: string } {
   if (kind === "week") {
     const from = addDays(startOfWeek(today), offset * 7);
     const to = addDays(from, 6);
@@ -22,13 +24,9 @@ function rangeFor(today: Date, kind: Range, offset: number, splitDay: number): {
     const m = addMonths(startOfMonth(today), offset);
     return { from: m, to: endOfMonth(m), label: m.toLocaleDateString("en-US", { month: "long", year: "numeric" }) };
   }
-  // pay period: 1st–splitDay, (splitDay+1)–end
-  const idx = (today.getDate() <= splitDay ? 0 : 1) + offset;
-  const m = addMonths(startOfMonth(today), Math.floor(idx / 2));
-  const second = ((idx % 2) + 2) % 2 === 1;
-  const from = second ? addDays(m, splitDay) : m;
-  const to = second ? endOfMonth(m) : addDays(m, splitDay - 1);
-  return { from, to, label: `${from.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${to.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` };
+  // pay period: anchored to paydays (or month halves), may run into next month
+  const r = shiftPeriod(data, currentPeriodRange(data, today), offset);
+  return { from: r.from, to: r.to, label: r.label };
 }
 
 export function MoneyView({ today }: { today: Date }) {
@@ -52,7 +50,7 @@ function FlowView({ today }: { today: Date }) {
   const data = useHome((s) => s.data)!;
   const [kind, setKind] = useState<Range>("week");
   const [offset, setOffset] = useState(0);
-  const r = rangeFor(today, kind, offset, data.pay.splitDay);
+  const r = rangeFor(data, today, kind, offset);
   const flow = useMemo(() => flowFor(data, ymd(r.from), ymd(r.to)), [data, r.from, r.to]);
   const [pick, setPick] = useState<FlowLine | null>(null);
   const acctName = (id: string) => data.accounts.find((a) => a.id === id)?.name ?? (id === "manual" ? "Manual" : "Removed account");

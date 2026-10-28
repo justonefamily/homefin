@@ -19,6 +19,86 @@ export const periodLabel = (date: Date, period: Period, splitDay: number) => {
 
 export const currentPeriod = (date: Date, splitDay: number): Period => (date.getDate() <= splitDay ? "a" : "b");
 
+/* ------------------------------------------------------------------ */
+/* Pay periods as real date ranges (can cross into the next month)      */
+/* ------------------------------------------------------------------ */
+
+export interface PeriodRange { period: Period; from: Date; to: Date; label: string; anchor: Date }
+
+/** The two days of the month a period starts on: [1, split+1] for halves, or the paydays (first two) when periods follow paychecks. */
+export function periodStarts(data: HomeData): [number, number] {
+  if (data.pay.periodMode === "paydays") {
+    const days = [...new Set(expectedPayDays(data))].filter((d) => d >= 1 && d <= 31).sort((a, b) => a - b);
+    if (days.length >= 2) return [days[0], days[1]];
+    if (days.length === 1) return [days[0], days[0]]; // one payday a month: a single period (b is empty)
+  }
+  return [1, Math.min(28, data.pay.splitDay) + 1];
+}
+
+const clampDay = (y: number, m: number, d: number) => new Date(y, m, Math.min(d, getDaysInMonth(new Date(y, m, 1))));
+const fmtRange = (from: Date, to: Date) => `${from.toLocaleString("en-US", { month: "short" })} ${from.getDate()} – ${to.getMonth() !== from.getMonth() ? to.toLocaleString("en-US", { month: "short" }) + " " : ""}${to.getDate()}`;
+
+/** The period that starts in `anchor`'s month: "a" runs from the first start to the day before the second; "b" from the second start to the day before next month's first start. */
+export function periodRangeFor(data: HomeData, anchor: Date, period: Period): PeriodRange {
+  const [s1, s2] = periodStarts(data);
+  const y = anchor.getFullYear(), m = anchor.getMonth();
+  if (period === "a") {
+    const from = clampDay(y, m, s1);
+    const to = s2 > s1 ? addDays(clampDay(y, m, s2), -1) : addDays(clampDay(y, m + 1, s1), -1);
+    return { period, from, to, label: fmtRange(from, to), anchor: new Date(y, m, 1) };
+  }
+  const from = clampDay(y, m, s2);
+  const to = s1 === 1 ? endOfMonth(from) : addDays(clampDay(y, m + 1, s1), -1);
+  return { period, from, to, label: fmtRange(from, to), anchor: new Date(y, m, 1) };
+}
+
+/** The period `date` falls in — may be the "b" period that started last month. */
+export function currentPeriodRange(data: HomeData, date: Date): PeriodRange {
+  const [s1, s2] = periodStarts(data);
+  const d = date.getDate();
+  if (d >= s2 && s2 > s1) return periodRangeFor(data, date, "b");
+  if (d >= s1) return periodRangeFor(data, date, "a");
+  // Before this month's first start: still inside last month's second period.
+  const prev = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+  return periodRangeFor(data, prev, s2 > s1 ? "b" : "a");
+}
+
+/** Step a period forward/back by whole periods. */
+export function shiftPeriod(data: HomeData, r: PeriodRange, by: number): PeriodRange {
+  const [s1, s2] = periodStarts(data);
+  const single = s2 <= s1;
+  let { period, anchor } = r;
+  let n = by;
+  while (n !== 0) {
+    if (single) { anchor = new Date(anchor.getFullYear(), anchor.getMonth() + Math.sign(n), 1); }
+    else if (n > 0) { if (period === "a") period = "b"; else { period = "a"; anchor = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1); } }
+    else { if (period === "b") period = "a"; else { period = "b"; anchor = new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1); } }
+    n -= Math.sign(n);
+  }
+  return periodRangeFor(data, anchor, period);
+}
+
+export const inRange = (d: Date, r: { from: Date; to: Date }) => d >= r.from && d <= r.to;
+
+/** Bills due inside a date range, with paid/overdue judged against the month each due date lands in. */
+export function billsInRange(data: HomeData, r: { from: Date; to: Date }, today: Date): BillStatus[] {
+  const out: BillStatus[] = [];
+  const months = new Set<string>();
+  for (let d = new Date(r.from.getFullYear(), r.from.getMonth(), 1); d <= r.to; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) months.add(monthKey(d));
+  for (const key of months) {
+    const [y, m] = key.split("-").map(Number);
+    const monthDate = new Date(y, m - 1, 1);
+    const dim = getDaysInMonth(monthDate);
+    for (const bill of data.bills) {
+      const dueDate = new Date(y, m - 1, Math.min(bill.dueDay, dim));
+      if (!inRange(dueDate, r)) continue;
+      const paid = isPaid(data, bill, key);
+      out.push({ bill, paid, overdue: !paid && dueDate < new Date(today.getFullYear(), today.getMonth(), today.getDate()), dueDate });
+    }
+  }
+  return out.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+}
+
 export const isPaid = (data: HomeData, bill: Bill, month: string) => data.payments.some((p) => p.billId === bill.id && p.month === month);
 
 export interface BillStatus { bill: Bill; paid: boolean; overdue: boolean; dueDate: Date; }

@@ -9,7 +9,7 @@ import { PeriodToggle } from "@/components/PeriodToggle";
 import { BillForm } from "@/components/BillForm";
 import { ItemSheet } from "@/components/ItemSheet";
 import { Button, Card, Eyebrow, Segmented, SectionTitle, Stat, cx, fmt, money } from "@/components/ui";
-import { billStatuses, currentPeriod, inPeriod, periodLabel, weeklyProjection, yearProjection } from "@/lib/projections";
+import { billStatuses, billsInRange, currentPeriodRange, inRange, shiftPeriod, weeklyProjection, yearProjection } from "@/lib/projections";
 import { monthKey } from "@/lib/strategies";
 import type { Bill } from "@/lib/types";
 import { autoMarkPaid, detectRecurring, merchantKey, suggestionToBill, type Suggestion } from "@/lib/detect";
@@ -25,13 +25,14 @@ export default function BillsPage() {
   const data = d!;
   const today = useToday();
   const [view, setView] = useState<View>((params.get("view") as View) || "month");
-  const [period, setPeriod] = useState(() => currentPeriod(today, data.pay.splitDay));
+  const [period, setPeriod] = useState(() => currentPeriodRange(data, today));
+  const periodChoices = [period, shiftPeriod(data, period, period.period === "a" ? 1 : -1)].sort((a, b) => a.from.getTime() - b.from.getTime());
   const [editing, setEditing] = useState<Bill | "new" | null>(null);
   const dim = getDaysInMonth(today);
   const month = monthKey(today);
 
   const statuses = billStatuses(data, today);
-  const periodBills = statuses.filter((s) => inPeriod(s.dueDate.getDate(), period, data.pay.splitDay));
+  const periodBills = billsInRange(data, period, today);
   const periodTotal = periodBills.reduce((s, b) => s + b.bill.amount, 0);
 
   const togglePaid = (bill: Bill, paid: boolean) =>
@@ -98,7 +99,7 @@ export default function BillsPage() {
       {view === "month" && (
         <div className="md:grid md:grid-cols-12 md:gap-6 flex flex-col gap-4">
           <div className="md:col-span-5 flex flex-col gap-4">
-            <PeriodToggle value={period} onChange={setPeriod} splitDay={data.pay.splitDay} daysInMonth={dim} size="sm" />
+            <PeriodToggle value={period} onChange={setPeriod} ranges={periodChoices} size="sm" />
             <Card className="p-3.5 flex flex-col gap-2">
               <div className="grid grid-cols-7 gap-1">{["S", "M", "T", "W", "T", "F", "S"].map((w, i) => <div key={i} className="text-center text-[11px] font-semibold text-muted">{w}</div>)}</div>
               <div className="grid grid-cols-7 gap-1">
@@ -107,10 +108,10 @@ export default function BillsPage() {
                   const day = c.day;
                   const bills = statuses.filter((s) => s.dueDate.getDate() === day);
                   const isToday = day === today.getDate();
-                  const sel = inPeriod(day, period, data.pay.splitDay);
+                  const sel = inRange(new Date(today.getFullYear(), today.getMonth(), day), period);
                   const isPay = data.pay.payDays.includes(day);
                   return (
-                    <button key={i} onClick={() => setPeriod(day <= data.pay.splitDay ? "a" : "b")} aria-label={`${today.toLocaleString("en-US", { month: "long" })} ${day}${bills.length ? `, ${bills.length} bill${bills.length > 1 ? "s" : ""}` : ""}`}
+                    <button key={i} onClick={() => { const dd = new Date(today.getFullYear(), today.getMonth(), day); const hit = periodChoices.find((r) => inRange(dd, r)); if (hit) setPeriod(hit); }} aria-label={`${today.toLocaleString("en-US", { month: "long" })} ${day}${bills.length ? `, ${bills.length} bill${bills.length > 1 ? "s" : ""}` : ""}`}
                       className={cx("h-11 md:h-14 rounded-[10px] flex flex-col items-center justify-center gap-0.5 text-[13px]", isToday ? "bg-ink text-white font-bold" : sel ? "bg-accent-soft font-medium" : "font-medium hover:bg-surface")}>
                       <div>{day}</div>
                       <div className="flex gap-0.5 h-1.5">
@@ -131,7 +132,7 @@ export default function BillsPage() {
           </div>
 
           <div className="md:col-span-7 flex flex-col gap-4">
-            <SectionTitle action={<span className="text-xs text-muted">tap to mark paid</span>}>{periodLabel(today, period, data.pay.splitDay)} · {money(periodTotal)}</SectionTitle>
+            <SectionTitle action={<span className="text-xs text-muted">tap to mark paid</span>}>{period.label} · {money(periodTotal)}</SectionTitle>
             <Card>
               {periodBills.length === 0 && <div className="p-4 text-sm text-muted">No bills due in this period.</div>}
               {periodBills.map((s) => (
