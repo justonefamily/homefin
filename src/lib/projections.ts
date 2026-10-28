@@ -96,7 +96,7 @@ export function weeklyProjection(data: HomeData, today: Date): WeekRow[] {
       income += dayIn(d);
       everyday += dayEveryday(d);
       bills += dayBills(d);
-      billNames.push(...dayBillNames(d));
+      for (const n of dayBillNames(d)) if (!billNames.includes(n)) billNames.push(n);
     }
     bal = startBalance + income - bills - everyday;
     const state: WeekRow["state"] = today > end ? "past" : today < cursor ? "future" : "current";

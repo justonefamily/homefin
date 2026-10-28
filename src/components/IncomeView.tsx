@@ -123,19 +123,37 @@ export function IncomeView({ today }: { today: Date }) {
 
 function Reviewed({ data, month, setEvent }: { data: ReturnType<typeof useHome.getState>["data"] & object; month: string; setEvent: (id: string, s: "counted" | "ignored" | undefined) => void }) {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<IncomeEvent | null>(null);
   const items = (data.income ?? []).filter((e) => e.date.startsWith(month) && (e.status || e.sourceId)).sort((a, b) => b.date.localeCompare(a.date));
   if (!items.length) return null;
+  // One row per payer: "FLORA payroll · 2× · $9,500", expandable to the individual deposits.
+  const groups = groupDeposits(items).map((g) => {
+    const src = g.items.find((e) => e.sourceId) ? data.incomeSources?.find((s) => s.id === g.items.find((e) => e.sourceId)!.sourceId) : undefined;
+    const counted = g.items.filter((e) => e.status !== "ignored");
+    return { ...g, label: src?.name ?? g.label, countedTotal: counted.reduce((s, e) => s + e.amount, 0), allIgnored: counted.length === 0, latest: g.items[0] };
+  });
   return (
     <div className="flex flex-col gap-2">
-      <button onClick={() => setOpen(!open)} className="flex items-center justify-between text-left"><Eyebrow>Received this month ({items.length})</Eyebrow><span className="text-xs text-accent font-semibold">{open ? "Hide" : "Show"}</span></button>
+      <button onClick={() => setOpen(!open)} className="flex items-center justify-between text-left"><Eyebrow>Received this month ({groups.length} payer{groups.length === 1 ? "" : "s"} · {items.length} deposit{items.length === 1 ? "" : "s"})</Eyebrow><span className="text-xs text-accent font-semibold">{open ? "Hide" : "Show"}</span></button>
       {open && (
         <Card>
-          {items.map((e) => (
-            <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0">
-              <button onClick={() => setDetail(e)} className="flex-1 min-w-0 text-left"><div className="text-[13px] font-semibold truncate">{e.source}</div><div className="text-[11px] text-muted">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {e.sourceId ? data.incomeSources?.find((s) => s.id === e.sourceId)?.name ?? "source" : e.status} · <span className="text-accent font-semibold">details</span></div></button>
-              <div className={cx("text-sm font-semibold", e.status === "ignored" && "line-through text-muted")}>{money(e.amount)}</div>
-              <button onClick={() => setEvent(e.id, e.status === "ignored" ? "counted" : "ignored")} className="h-8 px-2.5 rounded-[8px] text-[11px] font-semibold text-accent hover:bg-accent-bg">{e.status === "ignored" ? "Count instead" : "Ignore instead"}</button>
+          {groups.map((g) => (
+            <div key={g.key} className="border-b border-line-soft last:border-b-0">
+              <div className="flex items-center gap-3 px-4 py-2.5">
+                <button onClick={() => setExpanded(expanded === g.key ? null : g.key)} aria-expanded={expanded === g.key} className="flex-1 min-w-0 text-left">
+                  <div className="text-[13px] font-semibold truncate">{g.label}</div>
+                  <div className="text-[11px] text-muted">{g.items.length}× · {g.allIgnored ? "ignored" : g.items.some((e) => e.status === "ignored") ? `${g.items.filter((e) => e.status !== "ignored").length} counted` : "counted"} · <span className="text-accent font-semibold">{expanded === g.key ? "hide" : "see each"}</span></div>
+                </button>
+                <div className={cx("text-sm font-semibold", g.allIgnored && "line-through text-muted")}>{money(g.allIgnored ? g.total : g.countedTotal)}</div>
+              </div>
+              {expanded === g.key && g.items.map((e) => (
+                <div key={e.id} className="flex items-center gap-3 pl-8 pr-4 py-2 bg-surface/50 border-t border-line-soft">
+                  <button onClick={() => setDetail(e)} className="flex-1 min-w-0 text-left"><div className="text-[12px] text-muted">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {e.internal ? "transfer" : e.sourceId ? data.incomeSources?.find((s) => s.id === e.sourceId)?.name ?? "source" : e.status} · <span className="text-accent font-semibold">details</span></div></button>
+                  <div className={cx("text-[13px] font-semibold", e.status === "ignored" && "line-through text-muted")}>{money(e.amount)}</div>
+                  <button onClick={() => setEvent(e.id, e.status === "ignored" ? "counted" : "ignored")} className="h-7 px-2 rounded-[8px] text-[11px] font-semibold text-accent hover:bg-accent-bg">{e.status === "ignored" ? "Count" : "Ignore"}</button>
+                </div>
+              ))}
             </div>
           ))}
         </Card>
