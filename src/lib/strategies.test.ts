@@ -239,3 +239,21 @@ describe("year plan", () => {
     expect(yp.months[0].income).toBe(6400);
   });
 });
+
+describe("deposit grouping and always-ignore", () => {
+  it("groups same payer and auto-ignores dismissed payers on match", async () => {
+    const { groupDeposits, matchIncomeEvents } = await import("./detect");
+    const h = sampleHome(new Date(2026, 9, 27));
+    const income = [
+      { id: "a", date: "2026-10-01", amount: 40, source: "Zelle from Mom" }, { id: "b", date: "2026-10-08", amount: 40, source: "Zelle from Mom" }, { id: "c", date: "2026-10-15", amount: 40, source: "ZELLE FROM MOM" },
+      { id: "d", date: "2026-10-20", amount: 89, source: "AMAZON REFUND" },
+    ];
+    const groups = groupDeposits(income);
+    expect(groups[0].items).toHaveLength(3); expect(groups[0].sameAmount).toBe(true); expect(groups[0].total).toBe(120);
+    expect(groups[1].items).toHaveLength(1);
+    const data = { ...h, income, settings: { ...h.settings, dismissedIncome: [groups[1].key] } };
+    const matched = matchIncomeEvents(data)!;
+    expect(matched.find((e) => e.id === "d")!.status).toBe("ignored");
+    expect(matched.find((e) => e.id === "a")!.status).toBeUndefined();
+  });
+});

@@ -217,17 +217,25 @@ export const expectedPayDays = (data: HomeData) => {
 /** Attach deposits to sources by merchant key and mark them counted. Returns the updated events (only when something changed). */
 export function matchIncomeEvents(data: HomeData): IncomeEvent[] | null {
   const sources = data.incomeSources ?? [];
-  if (!sources.length) return null;
+  const dismissed = new Set(data.settings.dismissedIncome ?? []);
   let changed = false;
   const out = (data.income ?? []).map((e) => {
-    if (e.sourceId || e.status === "ignored") return e;
+    if (e.sourceId || e.status) return e;
     const k = merchantKey(e.source);
     const src = sources.find((s) => s.merchant === k);
-    if (!src) return e;
-    changed = true;
-    return { ...e, sourceId: src.id, status: "counted" as const };
+    if (src) { changed = true; return { ...e, sourceId: src.id, status: "counted" as const }; }
+    if (dismissed.has(k)) { changed = true; return { ...e, status: "ignored" as const }; }
+    return e;
   });
   return changed ? out : null;
+}
+
+/** Pending deposits grouped by payer (merchant key), largest group first. */
+export function groupDeposits(events: IncomeEvent[]): { key: string; label: string; items: IncomeEvent[]; total: number; sameAmount: boolean }[] {
+  const g = new Map<string, IncomeEvent[]>();
+  for (const e of events) { const k = merchantKey(e.source) || e.source.toLowerCase(); (g.get(k) ?? g.set(k, []).get(k)!).push(e); }
+  return [...g.entries()].map(([key, items]) => ({ key, label: items[0].source, items, total: items.reduce((s, e) => s + e.amount, 0), sameAmount: items.every((e) => Math.abs(e.amount - items[0].amount) < 0.005) }))
+    .sort((a, b) => b.items.length - a.items.length || b.total - a.total);
 }
 
 export const suggestionToSource = (s: IncomeSuggestion, id: string, kind: IncomeSource["kind"]): IncomeSource =>

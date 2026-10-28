@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Field, Modal, Stat, cx, inputCls, money, selectCls } from "./ui";
-import { detectIncome, expectedMonthlyIncome, matchIncomeEvents, merchantKey, monthlyOf, receivedInMonth, suggestionToSource, unreviewedDeposits, type IncomeSuggestion } from "@/lib/detect";
+import { detectIncome, expectedMonthlyIncome, groupDeposits, matchIncomeEvents, merchantKey, monthlyOf, receivedInMonth, suggestionToSource, unreviewedDeposits, type IncomeSuggestion } from "@/lib/detect";
 import { monthKey } from "@/lib/strategies";
 import type { IncomeSource } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
@@ -27,6 +27,11 @@ export function IncomeView({ today }: { today: Date }) {
   }, `added income source ${sg.source}`);
   const ignoreSuggestion = (sg: IncomeSuggestion) => update((h) => ({ ...h, settings: { ...h.settings, dismissedIncome: [...(h.settings.dismissedIncome ?? []), sg.key] }, income: (h.income ?? []).map((e) => (merchantKey(e.source) === sg.key && !e.sourceId ? { ...e, status: "ignored" as const } : e)) }), `ignored ${sg.source}`);
   const setEvent = (id: string, status: "counted" | "ignored" | undefined) => update((h) => ({ ...h, income: (h.income ?? []).map((e) => (e.id === id ? { ...e, status } : e)) }), status ? `${status} deposit` : "unreviewed deposit");
+  const setMany = (ids: string[], status: "counted" | "ignored", alwaysIgnoreKey?: string) => update((h) => ({
+    ...h,
+    income: (h.income ?? []).map((e) => (ids.includes(e.id) ? { ...e, status } : e)),
+    settings: alwaysIgnoreKey ? { ...h.settings, dismissedIncome: [...new Set([...(h.settings.dismissedIncome ?? []), alwaysIgnoreKey])] } : h.settings,
+  }), `${status} ${ids.length} deposits`);
   const saveSource = (s: IncomeSource) => update((h) => { const next = { ...h, incomeSources: (h.incomeSources ?? []).some((x) => x.id === s.id) ? (h.incomeSources ?? []).map((x) => (x.id === s.id ? s : x)) : [...(h.incomeSources ?? []), s] }; return { ...next, income: matchIncomeEvents(next) ?? next.income }; }, `saved income ${s.name}`);
   const removeSource = (id: string, alsoIgnore: boolean) => update((h) => {
     const src = (h.incomeSources ?? []).find((x) => x.id === id);
@@ -79,16 +84,31 @@ export function IncomeView({ today }: { today: Date }) {
       {pending.length > 0 && (
         <>
           <div className="flex items-center justify-between"><Eyebrow>Money in — needs a decision</Eyebrow><div className="text-[11px] text-muted">{pending.length} deposit{pending.length === 1 ? "" : "s"}</div></div>
-          <Card>
-            {pending.slice(0, 20).map((e) => (
-              <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0">
-                <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold truncate">{e.source}</div><div className="text-[11px] text-muted">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div></div>
-                <div className="text-sm font-semibold mr-1">{money(e.amount)}</div>
-                <button onClick={() => setEvent(e.id, "counted")} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">Count as income</button>
-                <button onClick={() => setEvent(e.id, "ignored")} className="h-8 px-2.5 rounded-[8px] text-[11px] font-semibold text-muted hover:bg-surface">Ignore</button>
-              </div>
+          <div className="flex flex-col gap-3">
+            {groupDeposits(pending).map((g) => (
+              <Card key={g.key}>
+                {g.items.length > 1 && (
+                  <div className="flex items-center gap-3 px-4 py-2.5 border-b border-line bg-surface/60 flex-wrap">
+                    <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold truncate">{g.label}</div><div className="text-[11px] text-muted">{g.items.length} deposits{g.sameAmount ? ` · same amount ${money(g.items[0].amount)}` : ""} · {money(g.total)} total</div></div>
+                    <div className="flex gap-1.5 flex-wrap">
+                      <button onClick={() => setMany(g.items.map((e) => e.id), "counted")} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">Count all {g.items.length}</button>
+                      <button onClick={() => setMany(g.items.map((e) => e.id), "ignored")} className="h-8 px-2.5 rounded-[8px] border border-chip bg-card text-[11px] font-semibold hover:border-field">Ignore all {g.items.length}</button>
+                      <button onClick={() => setMany(g.items.map((e) => e.id), "ignored", g.key)} title="Ignore these and never ask about this payer again" className="h-8 px-2.5 rounded-[8px] text-[11px] font-semibold text-muted hover:bg-surface">Always ignore</button>
+                    </div>
+                  </div>
+                )}
+                {g.items.slice(0, 12).map((e) => (
+                  <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0">
+                    <div className="flex-1 min-w-0"><div className={cx("text-[13px] truncate", g.items.length > 1 ? "text-muted" : "font-semibold")}>{g.items.length > 1 ? new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : e.source}</div>{g.items.length === 1 && <div className="text-[11px] text-muted">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>}</div>
+                    <div className="text-sm font-semibold mr-1">{money(e.amount)}</div>
+                    <button onClick={() => setEvent(e.id, "counted")} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">{g.items.length > 1 ? "Count" : "Count as income"}</button>
+                    <button onClick={() => setEvent(e.id, "ignored")} className="h-8 px-2.5 rounded-[8px] text-[11px] font-semibold text-muted hover:bg-surface">Ignore</button>
+                  </div>
+                ))}
+                {g.items.length > 12 && <div className="px-4 py-2 text-[11px] text-muted">+{g.items.length - 12} more from this payer — use the buttons above to decide them all at once.</div>}
+              </Card>
             ))}
-          </Card>
+          </div>
           <div className="text-[11px] text-muted">Transfers between your own accounts, refunds and reimbursements are usually &quot;Ignore&quot;. Gifts, side work and one-off payments are &quot;Count as income&quot;.</div>
         </>
       )}
