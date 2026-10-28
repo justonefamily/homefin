@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getDaysInMonth } from "date-fns";
 import { useHome } from "@/store/useHome";
+import { accountFromCredit, payoffCandidates } from "@/lib/credit/toAccounts";
+import Link from "next/link";
 import { useToday } from "@/components/hooks";
 import { Button, Card, Eyebrow, Field, Modal, ProgressBar, Segmented, SectionTitle, Stat, cx, fmt, inputCls, money, selectCls, byName } from "@/components/ui";
 import { STRATEGIES, babySteps, budgetRows, debtsFromAccounts, monthKey, simulatePayoff, splitRows, strategyMeta } from "@/lib/strategies";
@@ -39,6 +41,7 @@ export default function PlanPage() {
               </select>
             </Field>
             <Card className="p-4 flex flex-col gap-1"><div className="text-sm font-semibold">{strat.headline}</div><div className="text-xs text-muted leading-relaxed">{strat.description}</div></Card>
+            {strat.kind === "payoff" && <AddFromCredit />}
             {strat.kind === "payoff" && (
               <Card className="p-4 flex flex-col gap-2">
                 <div className="flex items-center justify-between"><div className="text-sm font-semibold">Extra toward debt</div><div className="text-sm font-bold">${fmt(data.settings.extraPayment)}/mo</div></div>
@@ -55,6 +58,46 @@ export default function PlanPage() {
 
       {view === "budget" && <BudgetView today={today} />}
       {view === "year" && <YearPlanView today={today} />}
+    </>
+  );
+}
+
+/** Pull balances off the credit report into the payoff plan — only the ones you pick. */
+function AddFromCredit() {
+  const { data: d, update } = useHome();
+  const data = d!;
+  const candidates = payoffCandidates(data);
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const hasReport = (data.credit?.reports?.length ?? 0) > 0;
+  const add = () => {
+    update((h) => ({ ...h, accounts: [...h.accounts, ...candidates.filter((c) => picked.has(c.account.id)).map((c) => accountFromCredit(c.account, uid()))] }), `added ${picked.size} debt${picked.size === 1 ? "" : "s"} from the credit report`);
+    setPicked(new Set()); setOpen(false);
+  };
+  return (
+    <>
+      <Card className="p-4 flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2"><div className="text-sm font-semibold">Debts on your credit report</div>{hasReport && candidates.length > 0 && <Button variant="secondary" onClick={() => setOpen(true)} className="h-8 px-3 text-xs">+ Add to payoff</Button>}</div>
+        <div className="text-[11px] text-muted">{!hasReport ? <>Import a report under <Link href="/accounts#credit" className="text-accent font-semibold">Accounts → Credit</Link> and any balances still owed can be added here.</> : candidates.length === 0 ? "Every balance on the report is already in your accounts." : `${candidates.length} balance${candidates.length === 1 ? "" : "s"} on the report ${candidates.length === 1 ? "isn't" : "aren't"} in your accounts yet — pick the ones worth paying down here.`}</div>
+      </Card>
+      {open && (
+        <Modal open onClose={() => setOpen(false)} title="Add debts from the credit report">
+          <div className="text-[12px] text-muted">Tick the ones you want in the payoff plan. Balances come from the report; set the APR afterwards under Accounts so the math is right. Skip anything that&apos;s wrong, disputed or already covered.</div>
+          <div className="flex flex-col gap-1.5 max-h-[55vh] overflow-y-auto">
+            {candidates.map(({ account: a, report: r }) => (
+              <label key={a.id} className={cx("flex items-start gap-3 rounded-[12px] border p-3 cursor-pointer", picked.has(a.id) ? "border-accent bg-accent-bg" : "border-line", a.adverse && "border-l-4 border-l-red")}>
+                <input type="checkbox" checked={picked.has(a.id)} onChange={() => { const n = new Set(picked); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); setPicked(n); }} className="mt-0.5 w-4 h-4 accent-[#0e6b74]" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold truncate">{a.creditor} <span className="text-muted font-normal">{a.accountMask.slice(-6)}</span></div>
+                  <div className="text-[11px] text-muted truncate">{[a.loanType ?? a.accountType, a.payStatus, r.person !== "" ? r.person : null].filter(Boolean).join(" · ")}{a.monthlyPayment ? ` · ${money(a.monthlyPayment)}/mo` : ""}</div>
+                </div>
+                <div className="text-[13px] font-semibold shrink-0">{money(a.balance ?? 0)}</div>
+              </label>
+            ))}
+          </div>
+          <Button disabled={picked.size === 0} onClick={add}>Add {picked.size || ""} to payoff plan</Button>
+        </Modal>
+      )}
     </>
   );
 }

@@ -25,6 +25,8 @@ export interface Account {
   /** Institution brand color (from Plaid, or the built-in palette) and logo (data URL from Plaid). */
   brandColor?: string;
   logo?: string;
+  /** Came from a credit report: "creditor|mask" so a re-import can refresh the balance. */
+  creditRef?: string;
 }
 
 export interface Bill {

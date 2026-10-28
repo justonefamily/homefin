@@ -7,6 +7,7 @@ import { parseTransUnion } from "@/lib/credit/parse";
 import { diffReports } from "@/lib/credit/diff";
 import type { CreditAccount, CreditReport } from "@/lib/credit/types";
 import { uid } from "@/lib/storage/adapter";
+import { refreshFromReport } from "@/lib/credit/toAccounts";
 
 const fmtDate = (s?: string) => s ?? "—";
 const RATING_CLS: Record<string, string> = { OK: "bg-green/80", "30": "bg-amber", "60": "bg-amber", "90": "bg-red/80", "120": "bg-red", "C/O": "bg-ink", COL: "bg-ink", X: "bg-chip", "N/R": "bg-line", "": "bg-line-soft" };
@@ -95,7 +96,7 @@ export function CreditView() {
           if (bureau !== "TransUnion") throw new Error(bureau ? `${bureau} reports aren't supported yet — TransUnion only for now.` : "That doesn't look like a credit report PDF.");
           const report = parseTransUnion(pages, { person: who, id: uid(), importedAt: new Date().toISOString() });
           if (!report.accounts.length) throw new Error("Couldn't find any accounts in that file.");
-          update((h) => ({ ...h, credit: { reports: [...(h.credit?.reports ?? []), report] } }), `imported ${report.bureau} credit report for ${who}`);
+          update((h) => refreshFromReport({ ...h, credit: { reports: [...(h.credit?.reports ?? []), report] } }, report), `imported ${report.bureau} credit report for ${who}`);
           setPerson(who); setShowImport(false);
         } catch (e) { alert((e as Error).message); }
         setImporting(false);
