@@ -74,7 +74,7 @@ export function mergeTransactions(home: HomeData, added: PlaidTx[], removed: str
   const existing = new Set(home.transactions.map((t) => t.id));
   const fresh: Transaction[] = added
     .filter((t) => !existing.has(t.transaction_id) && t.amount > 0 && !t.pending)
-    .map((t) => ({ id: t.transaction_id, accountId: t.account_id, date: t.date, description: cleanName(t.merchant_name) || cleanName(t.name) || "Transaction", amount: t.amount, category: catFor(t) }));
+    .map((t) => ({ id: t.transaction_id, accountId: t.account_id, date: t.date, description: cleanName(t.merchant_name) || cleanName(t.name) || "Transaction", amount: t.amount, category: catFor(t), ...(t.personal_finance_category?.primary === "TRANSFER_OUT" ? { transfer: true } : {}) }));
   const income = (home.income ?? []).slice();
   const SKIP_DEPOSITS = new Set(["TRANSFER_IN", "LOAN_PAYMENTS", "BANK_FEES"]);
   for (const t of added) {

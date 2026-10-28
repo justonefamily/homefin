@@ -1,4 +1,5 @@
 import type { Bill, BillPayment, HomeData, IncomeEvent, IncomeSource, Transaction } from "./types";
+import { resolveKey } from "./merchants";
 
 /**
  * Learn from what the bank already shows.
@@ -57,12 +58,14 @@ const CATEGORY_HINTS: [RegExp, string][] = [
 
 export function detectRecurring(data: HomeData, today = new Date()): Suggestion[] {
   const dismissed = new Set(data.settings.dismissedSuggestions ?? []);
-  const existingKeys = new Set(data.bills.map((b) => merchantKey(b.merchant ?? b.name)));
+  const existingKeys = new Set(data.bills.map((b) => resolveKey(data, b.merchant ?? merchantKey(b.name))));
   const groups = new Map<string, Transaction[]>();
   for (const t of data.transactions) {
     if (t.amount <= 0) continue;
-    const k = merchantKey(t.description);
+    const k = resolveKey(data, merchantKey(t.description));
     if (k.length < 3) continue;
+    const pref = data.settings.merchants?.[k];
+    if (pref?.kind === "transfer" || pref?.kind === "ignore" || (t.transfer && pref?.kind !== "spend")) continue;
     (groups.get(k) ?? groups.set(k, []).get(k)!).push(t);
   }
   const out: Suggestion[] = [];
@@ -81,14 +84,15 @@ export function detectRecurring(data: HomeData, today = new Date()): Suggestion[
       if (pts.length < c.min) continue;
       const onBeat = gaps.filter((g) => Math.abs(g - c.days) <= c.tol).length;
       const beatRatio = onBeat / gaps.length;
-      if (beatRatio < 0.6) continue;
-      const amtStable = amounts.filter((a) => Math.abs(a - amt) <= Math.max(5, amt * 0.25)).length / amounts.length;
-      if (amtStable < 0.6) continue;
+      if (beatRatio < 0.5) continue;
+      // Utilities and variable-rate loans swing a lot month to month; a wide band keeps them in.
+      const amtStable = amounts.filter((a) => Math.abs(a - amt) <= Math.max(15, amt * 0.4)).length / amounts.length;
+      if (amtStable < 0.5) continue;
       // Still active? Last seen within ~1.5 cadences of today.
       const sinceLast = daysBetween(pts[pts.length - 1].date, today.toISOString().slice(0, 10));
       if (sinceLast > c.days * 1.6 + c.tol) continue;
-      const name = pts[pts.length - 1].description;
-      const lower = name.toLowerCase();
+      const name = data.settings.merchants?.[key]?.name ?? pts[pts.length - 1].description;
+      const lower = (name + " " + key).toLowerCase();
       const hint = CATEGORY_HINTS.find(([re]) => re.test(lower))?.[1];
       const category = (hint && data.budgets.some((b) => b.id === hint) ? hint : undefined) ?? data.budgets.find((b) => b.bucket === "needs")?.id ?? data.budgets[0]?.id ?? "other";
       out.push({
@@ -119,11 +123,11 @@ export function autoMarkPaid(data: HomeData): BillPayment[] {
   const added: BillPayment[] = [];
   const have = new Set(data.payments.map((p) => `${p.billId}:${p.month}`));
   for (const b of data.bills) {
-    const key = b.merchant ?? merchantKey(b.name);
+    const key = resolveKey(data, b.merchant ?? merchantKey(b.name));
     if (key.length < 3) continue;
     for (const t of data.transactions) {
-      if (t.amount <= 0 || merchantKey(t.description) !== key) continue;
-      if (Math.abs(t.amount - b.amount) > Math.max(5, b.amount * 0.25)) continue;
+      if (t.amount <= 0 || resolveKey(data, merchantKey(t.description)) !== key) continue;
+      if (Math.abs(t.amount - b.amount) > Math.max(15, b.amount * 0.4)) continue;
       const month = t.date.slice(0, 7);
       const k = `${b.id}:${month}`;
       if (have.has(k)) continue;

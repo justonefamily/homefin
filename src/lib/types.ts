@@ -67,6 +67,20 @@ export interface Transaction {
   description: string;
   amount: number; // positive = money out
   category: string; // budget category id
+  /** Set at sync when the bank says this is a transfer between accounts (card payment, savings move) — not spending. */
+  transfer?: boolean;
+}
+
+/** How the household wants a merchant treated. Keyed by merchant key (see detect.ts merchantKey). */
+export interface MerchantPref {
+  /** Display name override. */
+  name?: string;
+  /** This merchant is really the same as that one — its transactions roll up there. */
+  mergedInto?: string;
+  /** "transfer" = money moving between your own accounts (excluded from spending); "ignore" = hide entirely. */
+  kind?: "spend" | "transfer" | "ignore";
+  /** Budget category override for every transaction at this merchant. */
+  category?: string;
 }
 
 export interface PaySchedule {
@@ -98,6 +112,8 @@ export interface Settings {
   autoApplyBudgetRecommendations?: boolean;
   /** The quarter (e.g. "2026-Q4") whose recommendations were last applied. */
   budgetsAppliedForQuarter?: string;
+  /** Per-merchant decisions: merges, renames, transfer/ignore, category. */
+  merchants?: Record<string, MerchantPref>;
 }
 
 /** A balance reading for an account on a date — Plaid sync appends one each run. Powers debt/net-worth history. */
