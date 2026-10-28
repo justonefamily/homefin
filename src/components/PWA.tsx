@@ -21,7 +21,7 @@ export function RegisterSW() {
     if (!("serviceWorker" in navigator) || process.env.NODE_ENV !== "production") return;
     let reg: ServiceWorkerRegistration | undefined;
     const onWaiting = (r: ServiceWorkerRegistration) => { if (r.waiting && navigator.serviceWorker.controller) setWaiting(r.waiting); };
-    navigator.serviceWorker.register("/sw.js").then((r) => {
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((r) => {
       reg = r;
       onWaiting(r);
       r.addEventListener("updatefound", () => { const nw = r.installing; nw?.addEventListener("statechange", () => { if (nw.state === "installed") onWaiting(r); }); });
@@ -48,6 +48,38 @@ export function RegisterSW() {
       </div>
     </div>
   );
+}
+
+/** Live installability diagnostics for /install. */
+export function useInstallDiagnostics() {
+  const [d, setD] = useState<Record<string, string>>({});
+  useEffect(() => {
+    (async () => {
+      const out: Record<string, string> = {};
+      out["Browser"] = navigator.userAgent.replace(/\(.*?\)/, "").slice(0, 90);
+      out["Secure context (HTTPS)"] = String(window.isSecureContext);
+      out["Already running as installed app"] = String(window.matchMedia("(display-mode: standalone)").matches || (navigator as unknown as { standalone?: boolean }).standalone === true);
+      try { const r = await fetch("/manifest.webmanifest", { cache: "no-store" }); const j = await r.json(); out["Manifest"] = `${r.status} · ${j.name} · ${j.icons?.length} icons · display ${j.display}`; } catch (e) { out["Manifest"] = "FAILED " + (e as Error).message; }
+      for (const u of ["/icon-192.png", "/icon-512.png"]) { try { const r = await fetch(u, { cache: "no-store" }); out[`Icon ${u}`] = `${r.status} ${r.headers.get("content-type")}`; } catch { out[`Icon ${u}`] = "FAILED"; } }
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        out["Service worker registrations"] = String(regs.length);
+        const r = regs[0];
+        out["Service worker state"] = r ? `${r.active ? "active" : "none"}${r.waiting ? " + waiting" : ""}${r.installing ? " + installing" : ""} · scope ${r.scope}` : "not registered";
+        out["Controlling this page"] = String(!!navigator.serviceWorker.controller);
+      } else out["Service worker"] = "unsupported";
+      out["Install prompt captured (beforeinstallprompt)"] = String(!!deferred);
+      out["Install prompt support"] = "onbeforeinstallprompt" in window ? "yes (Chrome/Edge/Android)" : "no (Safari/Firefox: use the browser's own Add to Home Screen / Install)";
+      out["Build"] = process.env.NEXT_PUBLIC_BUILD_ID ?? "dev";
+      setD(out);
+    })();
+    const on = () => setD((x) => ({ ...x, "Install prompt captured (beforeinstallprompt)": "true" }));
+    window.addEventListener("homefin:installable", on);
+    return () => window.removeEventListener("homefin:installable", on);
+  }, []);
+  const reset = async () => { if ("serviceWorker" in navigator) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); for (const k of await caches.keys()) await caches.delete(k); location.reload(); };
+  const promptInstall = async () => { if (!deferred) return false; await deferred.prompt(); const { outcome } = await deferred.userChoice; deferred = null; return outcome === "accepted"; };
+  return { d, reset, promptInstall };
 }
 
 /** "Install app" card: native prompt on Chrome/Edge/Android, step-by-step on iOS and desktop Safari. Hidden once installed. */
@@ -78,7 +110,7 @@ export function InstallCard() {
       ) : ios ? (
         <div className="text-[13px] text-muted leading-relaxed">On iPhone/iPad: tap the <Share size={13} className="inline -mt-0.5" /> <b>Share</b> button in Safari, then <b>Add to Home Screen</b>, then <b>Add</b>. It installs as a full-screen app.</div>
       ) : (
-        <div className="text-[13px] text-muted leading-relaxed">In Chrome or Edge, click the <b>install icon</b> at the right end of the address bar (or the ⋮ menu → <b>Install HomeFin</b>). If you only see &quot;Create shortcut&quot;, reload once — the app install becomes available after the first visit.</div>
+        <div className="text-[13px] text-muted leading-relaxed">In Chrome or Edge, click the <b>install icon</b> at the right end of the address bar (or the ⋮ menu → <b>Install HomeFin</b>). If you only see &quot;Create shortcut&quot;, open <a href="/install" className="text-accent font-semibold">the install page</a> for a fix.</div>
       )}
     </Card>
   );

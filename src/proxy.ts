@@ -9,9 +9,9 @@ export async function proxy(req: NextRequest) {
   const sb = createServerClient(url, key, { cookies: { getAll: () => req.cookies.getAll(), setAll: (all) => { all.forEach(({ name, value }) => req.cookies.set(name, value)); res = NextResponse.next({ request: req }); all.forEach(({ name, value, options }) => res.cookies.set(name, value, options)); } } });
   const { data: { user } } = await sb.auth.getUser();
   const p = req.nextUrl.pathname;
-  if (!user && !p.startsWith("/login") && !p.startsWith("/invite") && !p.startsWith("/api") && !p.startsWith("/auth")) {
+  if (!user && !p.startsWith("/login") && !p.startsWith("/invite") && !p.startsWith("/api") && !p.startsWith("/auth") && !p.startsWith("/install")) {
     const to = req.nextUrl.clone(); to.pathname = "/login"; to.searchParams.set("next", p); return NextResponse.redirect(to);
   }
   return res;
 }
-export const config = { matcher: ["/((?!_next|sw.js|offline.html|manifest.webmanifest|favicon.ico|icon.*\\.png|apple-touch-icon.png|icon.svg).*)"] };
+export const config = { matcher: ["/((?!_next|sw.js|offline.html|manifest.webmanifest|favicon.ico|icon.*\\.png|screenshot.*\\.png|apple-touch-icon.png|icon.svg).*)"] };
