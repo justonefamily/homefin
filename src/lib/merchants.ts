@@ -213,9 +213,12 @@ const dayDiff = (a: string, b: string) => Math.abs(new Date(a).getTime() - new D
 /**
  * Money that left one of your accounts and landed in another (Zelle to a spouse on the shared account,
  * a card payment, a move to savings, a refund) is not income and not spending. Pair each unreviewed deposit
- * with an outflow of the same amount within 3 days and mark both. Returns null when nothing changed.
+ * with an outflow of the same amount within `windowDays` and mark both. Returns null when nothing changed.
+ * Banks post at different speeds — a card payment can take most of a week to show on the card — so the
+ * window is 7 days; the closest-dated match wins.
  */
-export function matchInternalTransfers(data: HomeData): HomeData | null {
+export const TRANSFER_WINDOW_DAYS = 7;
+export function matchInternalTransfers(data: HomeData, windowDays = TRANSFER_WINDOW_DAYS): HomeData | null {
   const income = (data.income ?? []).slice();
   const txs = data.transactions.slice();
   const usedTx = new Set<string>();
@@ -229,7 +232,7 @@ export function matchInternalTransfers(data: HomeData): HomeData | null {
       const t = txs[j];
       if (usedTx.has(t.id) || t.amount <= 0 || Math.abs(t.amount - e.amount) > 0.005) continue;
       const gap = dayDiff(t.date, e.date);
-      if (gap > 3 || gap >= bestGap) continue;
+      if (gap > windowDays || gap >= bestGap) continue;
       if (prefFor(data, txKey(data, t)).kind === "spend") continue;
       best = j; bestGap = gap;
     }

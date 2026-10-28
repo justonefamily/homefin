@@ -64,6 +64,12 @@ describe("internal transfers", () => {
     expect(f.income).toBe(0); expect(f.spending).toBe(0); expect(f.transfers).toBe(300); expect(f.internalDeposits).toBe(1);
     expect(matchInternalTransfers(next)).toBeNull();
   });
+  it("matches a card payment that posts 5 days later", () => {
+    const h = home();
+    h.transactions.push({ id: "p1", accountId: "chk", date: "2026-10-01", description: "Payment to Chase Card", amount: 450, category: "other" });
+    h.income!.push({ id: "p2", date: "2026-10-06", amount: 450, source: "Payment Thank You", accountId: "cc" });
+    expect(matchInternalTransfers(h)!.income!.find((e) => e.id === "p2")?.internal).toBe(true);
+  });
   it("leaves a real deposit alone", () => {
     expect(matchInternalTransfers(home())).toBeNull();
   });
