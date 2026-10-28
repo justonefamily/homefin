@@ -57,6 +57,12 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   // "On your statement": every distinct wording, as a checklist. Unchecked ones get split out into their own merchant on Save.
   const wordings = useMemo(() => { const m = new Map<string, { count: number; total: number; last: string }>(); for (const t of txs) { const e = m.get(t.description) ?? { count: 0, total: 0, last: t.date }; e.count++; e.total += t.amount; if (t.date > e.last) e.last = t.date; m.set(t.description, e); } return [...m.entries()].map(([desc, v]) => ({ desc, ...v })).sort((a, b) => b.count - a.count || b.total - a.total); }, [txs]);
   const [showWordings, setShowWordings] = useState(false);
+  // Pull other items into this one. Anything already merged into those comes along (merges chain).
+  const [showMergeIn, setShowMergeIn] = useState(false);
+  const [mergeInQuery, setMergeInQuery] = useState("");
+  const [mergeInPicked, setMergeInPicked] = useState<Set<string>>(new Set());
+  const mergeInCandidates = all.filter((m) => m.key !== key && m.kind !== "ignore" && (mergeInPicked.has(m.key) || (mergeInQuery.length > 0 && (m.name.toLowerCase().includes(mergeInQuery.toLowerCase()) || m.key.includes(mergeInQuery.toLowerCase()))))).slice(0, 12);
+  const doMergeIn = () => { update((h) => { let next = h; for (const k of mergeInPicked) next = mergeMerchants(next, k, key); return next; }, `merged ${mergeInPicked.size} into ${displayName}`); setMergeInPicked(new Set()); setMergeInQuery(""); setShowMergeIn(false); };
   const [keep, setKeep] = useState<Set<string> | null>(null); // null = everything checked
   const kept = keep ?? new Set(wordings.map((w) => w.desc));
   const toggleKeep = (desc: string) => { const n = new Set(kept); if (n.has(desc)) n.delete(desc); else n.add(desc); setKeep(n); };
@@ -100,6 +106,26 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
             <span><span className="text-muted">On your statement as</span> <span className="font-medium">{wordings[0].desc.length > 48 ? wordings[0].desc.slice(0, 48) + "…" : wordings[0].desc}</span>{wordings.length > 1 && <span className="text-muted"> and {wordings.length - 1} other wording{wordings.length === 2 ? "" : "s"}</span>}</span>
             <span className="text-accent font-semibold shrink-0 ml-2">{showWordings ? "Hide" : "View & edit"}</span>
           </button>
+          <div className="flex items-center gap-3 px-3 py-1.5 border-t border-line text-[12px]">
+            <button onClick={() => setShowMergeIn(!showMergeIn)} aria-expanded={showMergeIn} className="inline-flex items-center gap-1 text-accent font-semibold"><Merge size={12} />{showMergeIn ? "Close merge" : "Merge other items into this"}</button>
+            {me && me.merged.length > 0 && <span className="text-muted">· {me.merged.length} already merged in</span>}
+          </div>
+          {showMergeIn && (
+            <div className="border-t border-line p-3 flex flex-col gap-2 bg-surface/60">
+              <div className="text-[11px] text-muted">Search for the other items that are really <b>{displayName}</b>. Everything already merged into them comes along too.</div>
+              <div className="relative"><Search size={13} className="absolute left-2.5 top-2.5 text-muted" /><input autoFocus className={cx(inputCls, "h-8 pl-8 text-[12px]")} placeholder="Search merchants or statement wording…" value={mergeInQuery} onChange={(e) => setMergeInQuery(e.target.value)} /></div>
+              {mergeInCandidates.length > 0 && <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                {mergeInCandidates.map((m) => (
+                  <label key={m.key} className={cx("flex items-center gap-2 px-3 py-1.5 rounded-[8px] border text-[12px] cursor-pointer", mergeInPicked.has(m.key) ? "border-accent bg-accent-bg" : "border-line bg-card hover:border-field")}>
+                    <input type="checkbox" checked={mergeInPicked.has(m.key)} onChange={() => { const n = new Set(mergeInPicked); if (n.has(m.key)) n.delete(m.key); else n.add(m.key); setMergeInPicked(n); }} className="w-4 h-4 accent-[#0e6b74]" />
+                    <span className="flex-1 min-w-0 truncate"><b>{m.name}</b> <span className="text-muted">· {m.count}× · {money(m.total)}{m.merged.length ? ` · +${m.merged.length} merged` : ""}</span></span>
+                  </label>
+                ))}
+              </div>}
+              {mergeInQuery && mergeInCandidates.length === 0 && <div className="text-[11px] text-muted">Nothing matches.</div>}
+              {mergeInPicked.size > 0 && <Button onClick={doMergeIn} className="h-8 px-3 text-xs self-start"><Merge size={12} className="inline -mt-0.5 mr-1" />Merge {mergeInPicked.size} into {displayName}</Button>}
+            </div>
+          )}
           {showWordings && (
             <div className="border-t border-line">
               <div className="flex items-center justify-between px-3 py-2 text-[11px] text-muted border-b border-line-soft"><span>Checked = stays part of <b>{displayName}</b>. Uncheck what doesn&apos;t belong, then save.</span><span className="flex gap-2 shrink-0"><button onClick={() => setKeep(new Set(wordings.map((w) => w.desc)))} className="text-accent font-semibold">All</button><button onClick={() => setKeep(new Set())} className="text-accent font-semibold">None</button></span></div>
