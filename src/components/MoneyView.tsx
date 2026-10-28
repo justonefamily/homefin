@@ -1,15 +1,13 @@
 "use client";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ArrowDownLeft, ArrowUpRight, Merge, Search, Receipt, Shuffle, EyeOff, Undo2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowDownLeft, ArrowUpRight, Merge, Search, Receipt, Shuffle } from "lucide-react";
 import { addDays, addMonths, endOfMonth, startOfMonth, startOfWeek } from "date-fns";
 import { useHome } from "@/store/useHome";
-import { Button, Card, Eyebrow, Field, Modal, Segmented, cx, inputCls, money, selectCls } from "./ui";
-import { flowFor, merchantSummaries, merchantToBill, mergeMerchants, setMerchantPref, similarMerchants, type FlowLine, type MerchantSummary } from "@/lib/merchants";
-import { autoMarkPaid } from "@/lib/detect";
+import { Button, Card, Eyebrow, Segmented, cx, inputCls, money } from "./ui";
+import { flowFor, merchantSummaries, mergeMerchants, similarMerchants, type FlowLine, type MerchantSummary } from "@/lib/merchants";
+import { ItemSheet } from "./ItemSheet";
 import { ymd } from "@/lib/calendar";
-import { uid } from "@/lib/storage/adapter";
 import { brandColorFor } from "@/lib/brands";
-import type { Bill } from "@/lib/types";
 
 type Range = "week" | "period" | "month";
 
@@ -99,7 +97,7 @@ function FlowView({ today }: { today: Date }) {
       <Section title="Everything else" icon={<ArrowUpRight size={14} className="text-red" />} lines={flow.spendLines} empty="Nothing else spent in this range." onPick={setPick} acctName={acctName} hint="Tap a line to make it a bill, mark it a transfer, or merge it." />
       {(flow.transferLines.length > 0 || flow.internalDeposits > 0) && <Section title="Transfers between your accounts" icon={<Shuffle size={14} className="text-muted" />} lines={flow.transferLines} muted empty="" onPick={setPick} acctName={acctName} hint={`Card payments, moves to savings, money sent to each other on the shared account — left out of income and spending.${flow.internalDeposits ? ` ${flow.internalDeposits} matching deposit${flow.internalDeposits === 1 ? "" : "s"} ignored too.` : ""}`} />}
 
-      {pick && <MerchantActions line={pick} onClose={() => setPick(null)} />}
+      {pick && (pick.category === "income" ? null : <ItemSheet merchantKey={pick.key} onClose={() => setPick(null)} />)}
     </>
   );
 }
@@ -124,51 +122,6 @@ function Section({ title, icon, lines, tone, muted, empty, extra, hint, onPick, 
         {extra}
       </Card>
     </div>
-  );
-}
-
-/** What to do with a merchant: make it a bill, call it a transfer, merge it into another, rename, categorize. */
-function MerchantActions({ line, onClose }: { line: FlowLine; onClose: () => void }) {
-  const { data: d, update } = useHome();
-  const data = d!;
-  const isIncome = line.category === "income";
-  const all = useMemo(() => merchantSummaries(data), [data]);
-  const me = all.find((m) => m.key === line.key);
-  const [name, setName] = useState(line.name);
-  const [category, setCategory] = useState(line.category);
-  const [mergeInto, setMergeInto] = useState("");
-  const [query, setQuery] = useState("");
-  if (isIncome) return <Modal open onClose={onClose} title={line.name}><div className="text-sm text-muted">Deposits are reviewed on <b>Bills → Income</b>: count them, ignore them, or attach them to a paycheck.</div></Modal>;
-  const candidates = all.filter((m) => m.key !== line.key && m.kind !== "ignore" && (!query || m.name.toLowerCase().includes(query.toLowerCase()) || m.key.includes(query.toLowerCase()))).slice(0, 8);
-  const makeBill = () => { if (!me) return; update((h) => { const b: Bill = merchantToBill(me, uid(), category); const next = { ...h, bills: [...h.bills, b] }; return { ...next, payments: [...next.payments, ...autoMarkPaid(next)] }; }, `bill from merchant: ${me.name}`); onClose(); };
-  const setKind = (kind: "transfer" | "ignore" | "spend") => { update((h) => setMerchantPref(h, line.key, { kind }), `${line.name}: ${kind}`); onClose(); };
-  const save = () => { update((h) => setMerchantPref(h, line.key, { name: name.trim() || undefined, category }), `updated ${line.name}`); onClose(); };
-  const merge = () => { if (!mergeInto) return; update((h) => mergeMerchants(h, line.key, mergeInto), `merged ${line.name}`); onClose(); };
-  return (
-    <Modal open onClose={onClose} title={line.name}>
-      {me && <div className="text-[12px] text-muted">{money(me.total)} across {me.count} transaction{me.count === 1 ? "" : "s"} since {new Date(me.firstSeen + "T12:00").toLocaleDateString("en-US", { month: "short", year: "numeric" })} · about {money(me.perMonth)}/mo{me.recurring ? " · looks recurring" : ""}</div>}
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Show as"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Category"><select className={selectCls} value={category} onChange={(e) => setCategory(e.target.value)}>{data.budgets.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}<option value="other">Other</option></select></Field>
-      </div>
-      <div className="flex gap-2 flex-wrap">
-        {!line.bill && <Button onClick={makeBill} className="h-10 px-3 text-xs"><Receipt size={13} className="inline -mt-0.5 mr-1" />Make this a bill{me ? ` · ${money(me.medianAmount)} around the ${me.medianDay}th` : ""}</Button>}
-        {line.bill && <div className="text-xs text-muted self-center">Already the bill <b>{line.bill.name}</b> — edit it on the Bills page.</div>}
-        <Button variant="secondary" onClick={() => setKind("transfer")} className="h-10 px-3 text-xs"><Shuffle size={13} className="inline -mt-0.5 mr-1" />It&apos;s a transfer</Button>
-        <Button variant="secondary" onClick={() => setKind("ignore")} className="h-10 px-3 text-xs"><EyeOff size={13} className="inline -mt-0.5 mr-1" />Hide it</Button>
-        {data.settings.merchants?.[line.key]?.kind && data.settings.merchants[line.key].kind !== "spend" && <Button variant="secondary" onClick={() => setKind("spend")} className="h-10 px-3 text-xs"><Undo2 size={13} className="inline -mt-0.5 mr-1" />Count as spending again</Button>}
-      </div>
-      <Field label="Merge into another merchant" hint="Same place showing up under two names? Pick the one to keep.">
-        <div className="relative"><Search size={14} className="absolute left-3 top-3.5 text-muted" /><input className={cx(inputCls, "pl-9")} placeholder="Search merchants…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-        <div className="flex flex-col gap-1 mt-2 max-h-40 overflow-y-auto">
-          {candidates.map((m) => <button key={m.key} onClick={() => setMergeInto(m.key)} className={cx("text-left text-[12px] px-3 py-2 rounded-[10px] border", mergeInto === m.key ? "border-accent bg-accent-bg" : "border-line hover:border-field")}><b>{m.name}</b> <span className="text-muted">· {money(m.total)} · {m.count}×</span></button>)}
-        </div>
-      </Field>
-      <div className="flex gap-2 pt-1">
-        {mergeInto && <Button onClick={merge} className="flex-1"><Merge size={13} className="inline -mt-0.5 mr-1" />Merge into {all.find((m) => m.key === mergeInto)?.name}</Button>}
-        <Button variant={mergeInto ? "secondary" : "primary"} className="flex-1" onClick={save}>Save</Button>
-      </div>
-    </Modal>
   );
 }
 
@@ -237,7 +190,7 @@ function MerchantsView({ today }: { today: Date }) {
           </button>
         ))}
       </Card>
-      {pick && <MerchantActions line={{ key: pick.key, name: pick.name, amount: pick.total, count: pick.count, accountIds: pick.accountIds, date: pick.lastSeen, bill: pick.bill, category: pick.category }} onClose={() => setPick(null)} />}
+      {pick && <ItemSheet merchantKey={pick.key} onClose={() => setPick(null)} />}
     </>
   );
 }

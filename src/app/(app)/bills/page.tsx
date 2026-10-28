@@ -2,11 +2,12 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getDaysInMonth, startOfMonth } from "date-fns";
-import { Check } from "lucide-react";
+import { Check, ChevronDown, Info } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { useToday } from "@/components/hooks";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { BillForm } from "@/components/BillForm";
+import { ItemSheet } from "@/components/ItemSheet";
 import { Button, Card, Eyebrow, Segmented, SectionTitle, Stat, cx, fmt, money } from "@/components/ui";
 import { billStatuses, currentPeriod, inPeriod, periodLabel, weeklyProjection, yearProjection } from "@/lib/projections";
 import { monthKey } from "@/lib/strategies";
@@ -38,6 +39,7 @@ export default function BillsPage() {
       paid ? `unmarked ${bill.name}` : `marked ${bill.name} paid`);
 
   const suggestions = detectRecurring(data, today);
+  const [item, setItem] = useState<string | null>(null);
   const confirmSuggestion = (sg: Suggestion) => update((h) => {
     const bill = suggestionToBill(sg, uid());
     const next = { ...h, bills: [...h.bills, bill] };
@@ -71,10 +73,10 @@ export default function BillsPage() {
           <div className="flex flex-col gap-2">
             {suggestions.slice(0, 8).map((sg) => (
               <div key={sg.key} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-[12px] bg-card border border-line px-3 py-2.5">
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold truncate">{sg.name}</div>
+                <button onClick={() => setItem(sg.key)} className="flex-1 min-w-0 text-left">
+                  <div className="text-[13px] font-semibold truncate">{sg.name} <span className="text-[11px] font-semibold text-accent">· details</span></div>
                   <div className="text-[11px] text-muted">{money(sg.amount)} {sg.cadence === "monthly" ? `around the ${sg.dueDay}${ord(sg.dueDay)}` : sg.cadence} · seen {sg.occurrences}× since {new Date(sg.firstSeen).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · {data.budgets.find((b) => b.id === sg.category)?.name ?? "uncategorized"}</div>
-                </div>
+                </button>
                 <div className="flex gap-2 shrink-0">
                   <button onClick={() => confirmSuggestion(sg)} className="h-9 px-3 rounded-[10px] bg-accent text-white text-xs font-semibold hover:bg-accent-deep">Yes, it&apos;s a bill</button>
                   <button onClick={() => dismissSuggestion(sg)} className="h-9 px-3 rounded-[10px] border border-chip bg-card text-xs font-semibold hover:border-field">Not a bill</button>
@@ -89,7 +91,7 @@ export default function BillsPage() {
       {view === "month" && dismissedKeys.length > 0 && (
         <div className="flex flex-col gap-2">
           <button onClick={() => setShowDismissed(!showDismissed)} className="text-xs text-muted text-left">{dismissedKeys.length} payment{dismissedKeys.length === 1 ? "" : "s"} marked &quot;not a bill&quot; · <span className="text-accent font-semibold">{showDismissed ? "hide" : "review"}</span></button>
-          {showDismissed && <Card>{dismissedKeys.map((k) => <div key={k} className="flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0"><div className="flex-1 text-[13px] capitalize">{k}</div><button onClick={() => restoreDismissed(k)} className="h-8 px-2.5 rounded-[8px] border border-chip text-[11px] font-semibold hover:border-field">Suggest again</button></div>)}</Card>}
+          {showDismissed && <Card>{dismissedKeys.map((k) => <div key={k} className="flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0"><button onClick={() => setItem(k)} className="flex-1 text-left text-[13px] capitalize">{k} <span className="text-[11px] text-accent font-semibold normal-case">· details</span></button><button onClick={() => restoreDismissed(k)} className="h-8 px-2.5 rounded-[8px] border border-chip text-[11px] font-semibold hover:border-field">Suggest again</button></div>)}</Card>}
         </div>
       )}
 
@@ -142,6 +144,7 @@ export default function BillsPage() {
                     <div className="text-sm font-semibold truncate">{s.bill.name}</div>
                     <div className="text-xs text-muted truncate">Due {s.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {data.accounts.find((a) => a.id === s.bill.accountId)?.institution ?? data.budgets.find((b) => b.id === s.bill.category)?.name} · autopay {s.bill.autopay ? "on" : "off"}</div>
                   </button>
+                  <button onClick={() => setItem(s.bill.merchant ?? merchantKey(s.bill.name))} aria-label={`Details for ${s.bill.name}`} className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:bg-surface hover:text-ink shrink-0"><Info size={15} /></button>
                   <div className="flex flex-col items-end gap-0.5">
                     <div className="text-sm font-semibold">{money(s.bill.amount)}</div>
                     <div className={cx("text-[11px] font-semibold", s.paid ? "text-green" : s.overdue ? "text-red" : "text-amber")}>{s.paid ? "Paid" : s.overdue ? "Overdue" : "Due"}</div>
@@ -158,6 +161,7 @@ export default function BillsPage() {
       {view === "income" && <IncomeView today={today} />}
       {view === "year" && <YearView />}
 
+      {item && <ItemSheet merchantKey={item} onClose={() => setItem(null)} />}
       {editing && <BillForm open onClose={() => setEditing(null)} data={data} bill={editing === "new" ? undefined : editing} onSave={saveBill} onDelete={deleteBill} onNotABill={notABill} />}
     </>
   );
@@ -174,6 +178,8 @@ function WeeksView() {
   const today = useToday();
   const weeks = weeklyProjection(data, today);
   const max = Math.max(1, ...weeks.map((w) => Math.abs(w.endBalance)));
+  const [open, setOpen] = useState<number | null>(null);
+  const [item, setItem] = useState<string | null>(null);
   return (
     <div className="md:grid md:grid-cols-12 md:gap-6 flex flex-col gap-4">
       <div className="md:col-span-5 flex flex-col gap-4">
@@ -197,22 +203,41 @@ function WeeksView() {
         {weeks.map((w) => (
           <div key={w.index} className={cx("flex flex-col gap-2 px-4 py-3 border-b border-line-soft last:border-b-0", w.state === "current" && "bg-accent-bg/50")}>
             <div className="flex items-center justify-between"><div className="text-sm font-semibold">{w.label}</div><div className={cx("text-[11px] font-semibold uppercase", w.state === "current" ? "text-accent" : "text-muted")}>{w.state === "current" ? "This week" : w.state}</div></div>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               <Mini label="Start" value={money(w.startBalance)} />
               <Mini label="In" value={`+${money(w.income)}`} cls="text-green" />
               <Mini label="Out" value={`−${money(w.bills + w.everyday)}`} cls="text-red" />
               <Mini label="End" value={money(w.endBalance)} cls={cx("font-bold", w.endBalance < 0 && "text-red")} />
             </div>
-            <div className="text-[11px] text-muted">{w.billNames.length ? w.billNames.join(", ") : "No bills"} + {money(w.everyday)} everyday spend</div>
+            <button onClick={() => setOpen(open === w.index ? null : w.index)} aria-expanded={open === w.index} className="flex items-center justify-between text-[12px] text-muted -mb-1 py-1">
+              <span>{w.billNames.length === 0 ? "No bills" : `${w.billNames.length} bill${w.billNames.length === 1 ? "" : "s"} · ${money(w.bills)}`} + {money(w.everyday)} everyday</span>
+              <ChevronDown size={15} className={cx("transition-transform", open === w.index && "rotate-180")} />
+            </button>
+            {open === w.index && (
+              <div className="rounded-[12px] border border-line bg-card overflow-hidden">
+                {w.billNames.map((n, i) => {
+                  const b = data.bills.find((x) => x.name === n);
+                  return (
+                    <button key={i} onClick={() => b && setItem(b.merchant ?? merchantKey(b.name))} className="w-full flex items-center gap-3 px-3 py-2 border-b border-line-soft last:border-b-0 text-left hover:bg-surface/60">
+                      <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold truncate">{n}</div>{b && <div className="text-[11px] text-muted">Due the {b.dueDay}{ord(b.dueDay)} · {data.budgets.find((c) => c.id === b.category)?.name ?? "Other"}{b.autopay ? " · autopay" : ""}</div>}</div>
+                      <div className="text-[13px] font-semibold">{b ? money(b.amount) : ""}</div>
+                    </button>
+                  );
+                })}
+                <div className="flex items-center gap-3 px-3 py-2 bg-surface/60 text-[12px] text-muted"><div className="flex-1">Everyday spending (estimate)</div><div className="font-semibold">{money(w.everyday)}</div></div>
+              </div>
+            )}
           </div>
         ))}
       </Card>
+      {item && <ItemSheet merchantKey={item} onClose={() => setItem(null)} />}
     </div>
   );
 }
 
+/** Callout box, same treatment as the account cards: label + number on its own tile inside the row. */
 const Mini = ({ label, value, cls }: { label: string; value: string; cls?: string }) => (
-  <div className="flex flex-col gap-0.5 min-w-0"><div className="text-[10px] text-muted">{label}</div><div className={cx("text-[13px] font-semibold truncate", cls)}>{value}</div></div>
+  <div className="flex flex-col gap-0.5 min-w-0 rounded-[10px] bg-surface border border-line-soft px-2.5 py-1.5"><div className="text-[10px] text-muted">{label}</div><div className={cx("text-[13px] font-semibold truncate", cls)}>{value}</div></div>
 );
 
 function YearView() {

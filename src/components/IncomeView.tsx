@@ -2,10 +2,11 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { useHome } from "@/store/useHome";
+import { DepositSheet } from "./ItemSheet";
 import { Button, Card, Eyebrow, Field, Modal, Stat, cx, inputCls, money, selectCls } from "./ui";
 import { detectIncome, expectedMonthlyIncome, groupDeposits, matchIncomeEvents, merchantKey, monthlyOf, receivedInMonth, suggestionToSource, unreviewedDeposits, type IncomeSuggestion } from "@/lib/detect";
 import { monthKey } from "@/lib/strategies";
-import type { IncomeSource } from "@/lib/types";
+import type { IncomeEvent, IncomeSource } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
 
 const CADENCE_LABEL: Record<IncomeSource["cadence"], string> = { weekly: "weekly", biweekly: "every 2 weeks", semimonthly: "twice a month", monthly: "monthly" };
@@ -122,6 +123,7 @@ export function IncomeView({ today }: { today: Date }) {
 
 function Reviewed({ data, month, setEvent }: { data: ReturnType<typeof useHome.getState>["data"] & object; month: string; setEvent: (id: string, s: "counted" | "ignored" | undefined) => void }) {
   const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState<IncomeEvent | null>(null);
   const items = (data.income ?? []).filter((e) => e.date.startsWith(month) && (e.status || e.sourceId)).sort((a, b) => b.date.localeCompare(a.date));
   if (!items.length) return null;
   return (
@@ -131,13 +133,14 @@ function Reviewed({ data, month, setEvent }: { data: ReturnType<typeof useHome.g
         <Card>
           {items.map((e) => (
             <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0">
-              <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold truncate">{e.source}</div><div className="text-[11px] text-muted">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {e.sourceId ? data.incomeSources?.find((s) => s.id === e.sourceId)?.name ?? "source" : e.status}</div></div>
+              <button onClick={() => setDetail(e)} className="flex-1 min-w-0 text-left"><div className="text-[13px] font-semibold truncate">{e.source}</div><div className="text-[11px] text-muted">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {e.sourceId ? data.incomeSources?.find((s) => s.id === e.sourceId)?.name ?? "source" : e.status} · <span className="text-accent font-semibold">details</span></div></button>
               <div className={cx("text-sm font-semibold", e.status === "ignored" && "line-through text-muted")}>{money(e.amount)}</div>
               <button onClick={() => setEvent(e.id, e.status === "ignored" ? "counted" : "ignored")} className="h-8 px-2.5 rounded-[8px] text-[11px] font-semibold text-accent hover:bg-accent-bg">{e.status === "ignored" ? "Count instead" : "Ignore instead"}</button>
             </div>
           ))}
         </Card>
       )}
+      {detail && <DepositSheet event={detail} onClose={() => setDetail(null)} />}
     </div>
   );
 }
