@@ -95,21 +95,25 @@ function FlowView({ today }: { today: Date }) {
       <Section title="Bills" icon={<Receipt size={14} className="text-accent" />} lines={flow.billLines} empty="No bill payments in this range." onPick={setPick} acctName={acctName}
         extra={flow.unpaidBills.length > 0 && <div className="px-4 py-2 text-[11px] text-amber border-t border-line-soft">Still due: {flow.unpaidBills.map((u) => `${u.bill.name} (${money(u.bill.amount)}, ${new Date(u.dueDate + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })})`).join(" · ")}</div>} />
       <Section title="Everything else" icon={<ArrowUpRight size={14} className="text-red" />} lines={flow.spendLines} empty="Nothing else spent in this range." onPick={setPick} acctName={acctName} hint="Tap a line to make it a bill, mark it a transfer, or merge it." />
-      {flow.reimbursableLines.length > 0 && <Section title="Fronted — coming back" icon={<Undo2 size={14} className="text-amber" />} lines={flow.reimbursableLines} empty="" onPick={setPick} acctName={acctName} hint="Reimbursable expenses: out of pocket now, counted as income when the money lands." />}
-      {(flow.transferLines.length > 0 || flow.internalDeposits > 0) && <Section title="Transfers between your accounts" icon={<Shuffle size={14} className="text-muted" />} lines={flow.transferLines} muted empty="" onPick={setPick} acctName={acctName} hint={`Card payments, moves to savings, money sent to each other on the shared account — left out of income and spending.${flow.internalDeposits ? ` ${flow.internalDeposits} matching deposit${flow.internalDeposits === 1 ? "" : "s"} ignored too.` : ""}`} />}
+      {flow.reimbursableLines.length > 0 && <Section defaultOpen={false} title="Fronted — coming back" icon={<Undo2 size={14} className="text-amber" />} lines={flow.reimbursableLines} empty="" onPick={setPick} acctName={acctName} hint="Reimbursable expenses: out of pocket now, counted as income when the money lands." />}
+      {(flow.transferLines.length > 0 || flow.internalDeposits > 0) && <Section defaultOpen={false} title="Transfers between your accounts" icon={<Shuffle size={14} className="text-muted" />} lines={flow.transferLines} muted empty="" onPick={setPick} acctName={acctName} hint={`Card payments, moves to savings, money sent to each other on the shared account — left out of income and spending.${flow.internalDeposits ? ` ${flow.internalDeposits} matching deposit${flow.internalDeposits === 1 ? "" : "s"} ignored too.` : ""}`} />}
 
       {pick && (pick.category === "income" ? null : <ItemSheet merchantKey={pick.key} onClose={() => setPick(null)} />)}
     </>
   );
 }
 
-function Section({ title, icon, lines, tone, muted, empty, extra, hint, onPick, acctName }: { title: string; icon: React.ReactNode; lines: FlowLine[]; tone?: "green"; muted?: boolean; empty: string; extra?: React.ReactNode; hint?: string; onPick: (l: FlowLine) => void; acctName: (id: string) => string }) {
+function Section({ title, icon, lines, tone, muted, empty, extra, hint, onPick, acctName, defaultOpen = true }: { title: string; icon: React.ReactNode; lines: FlowLine[]; tone?: "green"; muted?: boolean; empty: string; extra?: React.ReactNode; hint?: string; onPick: (l: FlowLine) => void; acctName: (id: string) => string; defaultOpen?: boolean }) {
   const total = lines.reduce((s, l) => s + l.amount, 0);
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between"><div className="flex items-center gap-1.5 text-sm font-semibold">{icon}{title}</div><div className={cx("text-sm font-bold", tone === "green" && "text-green", muted && "text-muted")}>{tone === "green" ? "+" : ""}{money(total)}</div></div>
-      {hint && <div className="text-[11px] text-muted -mt-1">{hint}</div>}
-      <Card>
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center justify-between text-left py-1">
+        <div className="flex items-center gap-1.5 text-sm font-semibold"><ChevronRight size={15} className={cx("text-muted transition-transform", open && "rotate-90")} />{icon}{title}<span className="text-[11px] font-normal text-muted">· {lines.length}</span></div>
+        <div className={cx("text-sm font-bold", tone === "green" && "text-green", muted && "text-muted")}>{tone === "green" ? "+" : ""}{money(total)}</div>
+      </button>
+      {open && hint && <div className="text-[11px] text-muted -mt-1">{hint}</div>}
+      {open && <Card>
         {lines.length === 0 && empty && <div className="px-4 py-3 text-xs text-muted">{empty}</div>}
         {lines.map((l) => (
           <button key={l.key} onClick={() => onPick(l)} className={cx("w-full text-left flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0 hover:bg-surface/60", muted && "opacity-70")}>
@@ -121,7 +125,7 @@ function Section({ title, icon, lines, tone, muted, empty, extra, hint, onPick, 
           </button>
         ))}
         {extra}
-      </Card>
+      </Card>}
     </div>
   );
 }
@@ -142,39 +146,13 @@ function MerchantsView({ today }: { today: Date }) {
   const total = list.filter((m) => m.kind !== "transfer").reduce((s, m) => s + m.total, 0);
   const max = Math.max(1, ...list.map((m) => m.total));
   const [pick, setPick] = useState<MerchantSummary | null>(null);
+  const [showSimilar, setShowSimilar] = useState(false);
   const catName = (id: string) => data.budgets.find((b) => b.id === id)?.name ?? "Other";
   const acctName = (id: string) => data.accounts.find((a) => a.id === id)?.name ?? "—";
   const merge = (from: string, into: string) => update((h) => mergeMerchants(h, from, into), "merged merchants");
 
-  return (
-    <>
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="w-full sm:w-80"><Segmented size="sm" value={span} onChange={setSpan} options={[{ id: "1m", label: "This month" }, { id: "3m", label: "3 mo" }, { id: "12m", label: "12 mo" }, { id: "all", label: "All" }]} /></div>
-        <div className="relative flex-1 min-w-[180px] max-w-xs"><Search size={14} className="absolute left-3 top-3 text-muted" /><input className={cx(inputCls, "h-10 pl-9")} placeholder="Find a merchant…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-      </div>
-      <div className="flex gap-1.5 flex-wrap text-[11px]">
-        {(["all", "spend", "bill", "reimbursable", "transfer", "ignore"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={cx("h-8 px-3 rounded-full border font-semibold", filter === f ? "bg-ink text-white border-ink" : "bg-card border-line text-muted hover:border-field")}>{{ all: "Everything", spend: "Spending", bill: "Bills", reimbursable: "Coming back", transfer: "Transfers", ignore: "Hidden" }[f]}</button>)}
-      </div>
-      <div className="text-[11px] text-muted -mt-2">{list.length} merchant{list.length === 1 ? "" : "s"} · {money(total)} · {spanLabel}{filter !== "all" ? ` · ${{ spend: "spending only", bill: "bills only", reimbursable: "coming back only", transfer: "transfers only", ignore: "hidden only" }[filter]}` : ""}</div>
-
-      {similar.length > 0 && (
-        <Card className="p-4 flex flex-col gap-2 border-accent-line bg-accent-bg/40">
-          <div className="flex items-center gap-2"><Merge size={15} className="text-accent" /><div className="text-sm font-semibold">These might be the same place</div></div>
-          {similar.map(([a, b]) => (
-            <div key={a.key + b.key} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-[12px] bg-card border border-line px-3 py-2">
-              <div className="flex-1 text-[12px] min-w-0"><b>{a.name}</b> <span className="text-muted">({money(a.total)})</span> &amp; <b>{b.name}</b> <span className="text-muted">({money(b.total)})</span></div>
-              <div className="flex gap-1.5 shrink-0">
-                <button onClick={() => merge(b.key, a.key)} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">Keep “{a.name.slice(0, 18)}”</button>
-                <button onClick={() => merge(a.key, b.key)} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">Keep “{b.name.slice(0, 18)}”</button>
-              </div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      <Card>
-        {list.length === 0 && <div className="px-4 py-3 text-xs text-muted">No merchants yet — link a bank or add transactions.</div>}
-        {list.map((m) => {
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const row = (m: MerchantSummary) => {
           const badge = m.kind === "bill" ? { text: "Bill", cls: "text-accent bg-accent-bg" } : m.kind === "transfer" ? { text: "Transfer", cls: "text-muted bg-surface" } : m.kind === "ignore" ? { text: "Hidden", cls: "text-muted bg-surface" } : m.kind === "reimbursable" ? { text: "Coming back", cls: "text-amber bg-amber/10" } : m.recurring ? { text: "Recurring — bill?", cls: "text-amber bg-amber/10" } : null;
           return (
             <button key={m.key} onClick={() => setPick(m)} className="w-full text-left px-4 py-3 border-b border-line-soft last:border-b-0 hover:bg-surface/60 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center">
@@ -188,8 +166,57 @@ function MerchantsView({ today }: { today: Date }) {
               <div className="col-span-2 h-1 rounded-full bg-line-soft overflow-hidden"><div className={cx("h-full rounded-full", m.kind === "bill" ? "bg-accent" : m.kind === "transfer" ? "bg-chip" : "bg-ink")} style={{ width: `${Math.max(2, (m.total / max) * 100)}%` }} /></div>
             </button>
           );
-        })}
-      </Card>
+  };
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="w-full sm:w-80"><Segmented size="sm" value={span} onChange={setSpan} options={[{ id: "1m", label: "This month" }, { id: "3m", label: "3 mo" }, { id: "12m", label: "12 mo" }, { id: "all", label: "All" }]} /></div>
+        <div className="relative flex-1 min-w-[180px] max-w-xs"><Search size={14} className="absolute left-3 top-3 text-muted" /><input className={cx(inputCls, "h-10 pl-9")} placeholder="Find a merchant…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      </div>
+      <div className="flex gap-1.5 flex-wrap text-[11px]">
+        {(["all", "spend", "bill", "reimbursable", "transfer", "ignore"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={cx("h-8 px-3 rounded-full border font-semibold", filter === f ? "bg-ink text-white border-ink" : "bg-card border-line text-muted hover:border-field")}>{{ all: "Everything", spend: "Spending", bill: "Bills", reimbursable: "Coming back", transfer: "Transfers", ignore: "Hidden" }[f]}</button>)}
+      </div>
+      <div className="text-[11px] text-muted -mt-2">{list.length} merchant{list.length === 1 ? "" : "s"} · {money(total)} · {spanLabel}{filter !== "all" ? ` · ${{ spend: "spending only", bill: "bills only", reimbursable: "coming back only", transfer: "transfers only", ignore: "hidden only" }[filter]}` : ""}</div>
+
+      {similar.length > 0 && (
+        <Card className="p-4 flex flex-col gap-2 border-accent-line bg-accent-bg/40">
+          <button onClick={() => setShowSimilar(!showSimilar)} aria-expanded={showSimilar} className="flex items-center gap-2 text-left"><ChevronRight size={15} className={cx("text-accent transition-transform", showSimilar && "rotate-90")} /><Merge size={15} className="text-accent" /><div className="text-sm font-semibold">These might be the same place</div><div className="text-[11px] text-muted">· {similar.length}</div></button>
+          {showSimilar && similar.map(([a, b]) => (
+            <div key={a.key + b.key} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-[12px] bg-card border border-line px-3 py-2">
+              <div className="flex-1 text-[12px] min-w-0"><b>{a.name}</b> <span className="text-muted">({money(a.total)})</span> &amp; <b>{b.name}</b> <span className="text-muted">({money(b.total)})</span></div>
+              <div className="flex gap-1.5 shrink-0">
+                <button onClick={() => merge(b.key, a.key)} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">Keep “{a.name.slice(0, 18)}”</button>
+                <button onClick={() => merge(a.key, b.key)} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">Keep “{b.name.slice(0, 18)}”</button>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {filter === "all" ? (
+        (["spend", "bill", "reimbursable", "transfer"] as const).map((k) => {
+          const items = list.filter((m) => m.kind === k);
+          if (!items.length) return null;
+          const label = { spend: "Spending", bill: "Bills", reimbursable: "Coming back", transfer: "Transfers" }[k];
+          const sum = items.reduce((s, m) => s + m.total, 0);
+          const open = openGroups[k] ?? (k === "spend" || k === "bill");
+          return (
+            <div key={k} className="flex flex-col gap-2">
+              <button onClick={() => setOpenGroups({ ...openGroups, [k]: !open })} aria-expanded={open} className="flex items-center justify-between text-left py-1">
+                <div className="flex items-center gap-1.5 text-sm font-semibold"><ChevronRight size={15} className={cx("text-muted transition-transform", open && "rotate-90")} />{label}<span className="text-[11px] font-normal text-muted">· {items.length}</span></div>
+                <div className={cx("text-sm font-bold", k === "transfer" && "text-muted")}>{money(sum)}</div>
+              </button>
+              {open && <Card>{items.map(row)}</Card>}
+            </div>
+          );
+        })
+      ) : (
+        <Card>
+          {list.length === 0 && <div className="px-4 py-3 text-xs text-muted">Nothing here for this window.</div>}
+          {list.map(row)}
+        </Card>
+      )}
+      {list.length === 0 && filter === "all" && <Card className="px-4 py-3 text-xs text-muted">No merchants yet — link a bank or add transactions.</Card>}
       {pick && <ItemSheet merchantKey={pick.key} onClose={() => setPick(null)} />}
     </>
   );
