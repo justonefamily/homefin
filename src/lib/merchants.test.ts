@@ -97,7 +97,7 @@ describe("refunds", () => {
     h.income!.push({ id: "r1", date: "2026-10-13", amount: 50, source: "Amazon", status: "refund" });
     const f = flowFor(h, "2026-10-12", "2026-10-18");
     expect(f.income).toBe(2000);
-    expect(f.spending).toBe(150); // 200 of spending − 50 refund
+    expect(f.spending).toBe(300); // 350 of spending (no bills set here) − 50 refund
     expect(f.spendLines.some((l) => l.amount === -50)).toBe(true);
   });
 });
