@@ -6,7 +6,7 @@ import { Modal, cx, money } from "./ui";
 import { flowFor } from "@/lib/merchants";
 import { monthlyOf } from "@/lib/detect";
 import { debtsFromAccounts, strategyMeta } from "@/lib/strategies";
-import type { PlanMonth } from "@/lib/yearplan";
+import { billsStillAhead, type PlanMonth } from "@/lib/yearplan";
 import { getDaysInMonth } from "date-fns";
 
 export type BreakdownKind = "income" | "outgo" | "debt" | "landmarks";
@@ -67,9 +67,10 @@ export function PlanBreakdown({ month, kind, onClose, onEditLandmark }: { month:
             </Group>
           </>}
           {month.source !== "actual" && <>
-            <Group title={month.source === "blend" ? "Bills still ahead this month (plan)" : "Bills"} total={month.source === "blend" ? undefined : data.bills.reduce((s, b) => s + b.amount, 0)}>
+            <Group title={month.source === "blend" ? "Bills still due after today" : "Bills"} total={(month.source === "blend" ? billsStillAhead(data, month.key, new Date()) : data.bills).reduce((s, b) => s + b.amount, 0)}>
               {data.bills.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">No bills set up yet.</div>}
-              {data.bills.slice().sort((a, b) => a.dueDay - b.dueDay).map((b) => <Line key={b.id} name={b.name} sub={`Due the ${b.dueDay}${ord(b.dueDay)} · ${data.budgets.find((c) => c.id === b.category)?.name ?? "Other"}${b.autopay ? " · autopay" : ""}`} amount={b.amount} onClick={() => openItem(b.merchant ?? b.name.toLowerCase())} />)}
+              {month.source === "blend" && billsStillAhead(data, month.key, new Date()).length === 0 && data.bills.length > 0 && <div className="px-3 py-2 text-[12px] text-muted">Every bill is already paid or past its due day this month.</div>}
+              {(month.source === "blend" ? billsStillAhead(data, month.key, new Date()) : data.bills.slice().sort((a, b) => a.dueDay - b.dueDay)).map((b) => <Line key={b.id} name={b.name} sub={`Due the ${b.dueDay}${ord(b.dueDay)} · ${data.budgets.find((c) => c.id === b.category)?.name ?? "Other"}${b.autopay ? " · autopay" : ""}`} amount={b.amount} onClick={() => openItem(b.merchant ?? b.name.toLowerCase())} />)}
             </Group>
             <Group title="Everyday spending (estimate)" total={data.settings.everydaySpend}>
               <Line name="Groceries, gas, dining, the rest" sub="The estimate the plan uses. See what's actually behind it, by category and merchant, on Money → Everyday." amount={data.settings.everydaySpend} />
