@@ -69,8 +69,11 @@ const DB: [RegExp, Course, string[]][] = [
   [/\btea|coffee|juice|water|soda\b/i, "drink", []],
 ];
 
+/** Most specific pattern wins: "rice and peas" beats "rice", "curry goat" beats "curry". */
+const ORDERED = [...DB].sort((a, b) => b[0].source.length - a[0].source.length);
+
 export function guessDish(name: string): { course: Course; ingredients: string[]; confident: boolean } {
-  const hit = DB.find(([re]) => re.test(name));
+  const hit = ORDERED.find(([re]) => re.test(name));
   if (hit) return { course: hit[1], ingredients: hit[2], confident: true };
   return { course: "main", ingredients: [], confident: false };
 }

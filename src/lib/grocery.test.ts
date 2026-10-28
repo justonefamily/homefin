@@ -13,6 +13,10 @@ describe("dish import", () => {
     expect(g.ingredients).toContain("tortillas");
     expect(g.ingredients).toContain("onion");
   });
+  it("prefers the specific dish", () => {
+    expect(guessDish("Rice and peas").ingredients).toContain("coconut milk");
+    expect(guessDish("Curry goat").ingredients).toContain("goat meat");
+  });
   it("normalizes ingredients for dedupe", () => {
     expect(normalizeIngredient("Onions")).toBe("onion");
     expect(normalizeIngredient("2 cups rice")).toBe("rice");
