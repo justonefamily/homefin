@@ -167,7 +167,7 @@ function PayModal({ onClose }: { onClose: () => void }) {
       <Field label="Take-home income per month ($)"><input className={inputCls} type="number" inputMode="decimal" value={income || ""} onChange={(e) => setIncome(Number(e.target.value))} /></Field>
       <Field label="Paydays (days of month)" hint="Comma-separated. Twice a month = 1, 16. Monthly = 1."><input className={inputCls} value={days} onChange={(e) => setDays(e.target.value)} /></Field>
       <Field label="Pay periods" hint={mode === "paydays" ? "Each period starts on a payday and runs to the day before the next one. Paid the 15th & 30th: the Sep 30 check covers Sep 30 – Oct 14, the Oct 15 check covers Oct 15 – 29, and so on." : "Two halves: the 1st to the split day, then the split day + 1 to the end of the month."}>
-        <select className={selectCls} value={mode} onChange={(e) => setMode(e.target.value as "halves" | "paydays" | "custom")}><option value="custom">Set each paycheck's dates</option><option value="paydays">Start on my paydays</option><option value="halves">Halves of the month</option></select>
+        <select className={selectCls} value={mode} onChange={(e) => setMode(e.target.value as "halves" | "paydays" | "custom")}><option value="custom">Set each paycheck&apos;s dates</option><option value="paydays">Start on my paydays</option><option value="halves">Halves of the month</option></select>
       </Field>
       {mode === "custom" && (
         <div className="flex flex-col gap-2">
