@@ -3,7 +3,7 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, Check, Copy, UtensilsCrossed, Plus, X, ShoppingCart, Sparkles, Loader2, Printer } from "lucide-react";
 import { isSameDay } from "date-fns";
 import { useHome } from "@/store/useHome";
-import { Button, Card, Eyebrow, Field, Modal, Segmented, cx, inputCls, selectCls } from "./ui";
+import { Button, Card, Eyebrow, Field, Modal, Segmented, byName, cx, inputCls, selectCls } from "./ui";
 import { COURSES, COURSE_LABEL, COURSE_SINGULAR, SLOTS, SLOT_LABEL, copyWeek, describeMeal, dishFrequency, groceryFor, itemsOn, mealAt, weekDays, ymd } from "@/lib/calendar";
 import { guessDish, normalizeIngredient, parseDishList } from "@/lib/ingredients";
 import type { CalendarItem, Course, Dish, MealComponent, MealSlot } from "@/lib/types";
@@ -130,7 +130,7 @@ function MealEditor({ date, slot, item, today, onClose, onSave, onRemove }: { da
   const [components, setComponents] = useState<MealComponent[]>(item?.components ?? []);
   const [notes, setNotes] = useState(item?.notes ?? "");
   const [newDish, setNewDish] = useState<{ course: Course; name: string } | null>(null);
-  const byCourse = (c: Course) => dishes.filter((x) => x.course === c);
+  const byCourse = (c: Course) => dishes.filter((x) => x.course === c).sort(byName);
   const addQuick = (course: Course, name: string) => {
     const dish: Dish = { id: uid(), name: name.trim(), course };
     update((h) => ({ ...h, dishes: [...(h.dishes ?? []), dish] }), `added dish ${dish.name}`);

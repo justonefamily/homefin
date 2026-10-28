@@ -4,7 +4,7 @@ import { EyeOff, Merge, Receipt, Search, Shuffle, Undo2, Ban, Check, Flag } from
 import { findFlag, toggleFlag } from "@/lib/flags";
 import { useHome } from "@/store/useHome";
 import { useItem } from "@/store/useItem";
-import { Button, Field, Modal, cx, inputCls, money, selectCls } from "./ui";
+import { Button, Field, Modal, byName, cx, inputCls, money, selectCls } from "./ui";
 import { billKeyMap, merchantSummaries, merchantToBill, mergeMerchants, prefFor, resolveKey, setMerchantPref, txKey, unmergeMerchant } from "@/lib/merchants";
 import { autoMarkPaid, detectRecurring, merchantKey, p2pLabel, suggestionToBill } from "@/lib/detect";
 import { brandColorFor } from "@/lib/brands";
@@ -137,7 +137,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
       {/* What you've decided */}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Call it" hint="Your name for it — used everywhere, and for anything else from this merchant."><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Car note" /></Field>
-        <Field label="Category"><select className={selectCls} value={category} onChange={(e) => setCategory(e.target.value)}>{data.budgets.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}<option value="other">Other</option></select></Field>
+        <Field label="Category"><select className={selectCls} value={category} onChange={(e) => setCategory(e.target.value)}>{[...data.budgets].sort(byName).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}<option value="other">Other</option></select></Field>
       </div>
       <div className="flex gap-2 flex-wrap">
         {!bill && <Button onClick={makeBill} className="h-10 px-3 text-xs"><Receipt size={13} className="inline -mt-0.5 mr-1" />{suggestion ? "Yes, it's a bill" : "Make this a bill"}{me ? ` · ${money(suggestion?.amount ?? me.medianAmount)}` : ""}</Button>}

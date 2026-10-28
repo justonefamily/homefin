@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { getDaysInMonth } from "date-fns";
 import { useHome } from "@/store/useHome";
 import { useToday } from "@/components/hooks";
-import { Button, Card, Eyebrow, Field, Modal, ProgressBar, Segmented, SectionTitle, Stat, cx, fmt, inputCls, money, selectCls } from "@/components/ui";
+import { Button, Card, Eyebrow, Field, Modal, ProgressBar, Segmented, SectionTitle, Stat, cx, fmt, inputCls, money, selectCls, byName } from "@/components/ui";
 import { STRATEGIES, babySteps, budgetRows, debtsFromAccounts, monthKey, simulatePayoff, splitRows, strategyMeta } from "@/lib/strategies";
 import type { BudgetCategory, StrategyId } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
@@ -35,7 +35,7 @@ export default function PlanPage() {
           <div className="md:col-span-4 flex flex-col gap-4">
             <Field label="Strategy">
               <select className={cx(selectCls, "h-[52px] text-[15px] font-semibold rounded-[14px]")} value={data.settings.strategy} onChange={(e) => setStrategy(e.target.value as StrategyId)}>
-                {STRATEGIES.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.headline}</option>)}
+                {[...STRATEGIES].sort(byName).map((s) => <option key={s.id} value={s.id}>{s.name} — {s.headline}</option>)}
               </select>
             </Field>
             <Card className="p-4 flex flex-col gap-1"><div className="text-sm font-semibold">{strat.headline}</div><div className="text-xs text-muted leading-relaxed">{strat.description}</div></Card>
@@ -243,7 +243,7 @@ function CategoryForm({ cat, onClose, onSave, onDelete }: { cat?: BudgetCategory
       </div>
       <Field label="Counts toward" hint="Used by 50/30/20 and 6 Cans to sort this category into a bucket. Reimbursable = you front it and it comes back, so it isn't spending.">
         <select className={selectCls} value={bucket} onChange={(e) => setBucket(e.target.value as BudgetCategory["bucket"])}>
-          <option value="needs">Needs / necessities</option><option value="wants">Wants</option><option value="play">Play</option><option value="education">Education</option><option value="savings">Savings & debt</option><option value="giving">Giving / tithe</option><option value="reimbursable">Reimbursable expense — money comes back</option>
+          <option value="education">Education</option><option value="giving">Giving / tithe</option><option value="needs">Needs / necessities</option><option value="play">Play</option><option value="reimbursable">Reimbursable expense — money comes back</option><option value="savings">Savings & debt</option><option value="wants">Wants</option>
         </select>
       </Field>
       <div className="flex gap-2 pt-1">

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Info } from "lucide-react";
-import { Button, Field, Modal, inputCls, selectCls } from "./ui";
+import { Button, Field, Modal, byName, inputCls, selectCls } from "./ui";
 import { useItem } from "@/store/useItem";
 import { merchantKey } from "@/lib/detect";
 import type { Bill, HomeData } from "@/lib/types";
@@ -29,14 +29,14 @@ export function BillForm({ open, onClose, data, bill, onSave, onDelete, onNotABi
       </div>
       <Field label="Budget category">
         <select className={selectCls} value={category} onChange={(e) => setCategory(e.target.value)}>
-          {data.budgets.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {[...data.budgets].sort(byName).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           {data.budgets.length === 0 && <option value="">(add categories under Plan → Budget)</option>}
         </select>
       </Field>
       <Field label="Linked account (optional)">
         <select className={selectCls} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
           <option value="">None</option>
-          {data.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          {[...data.accounts].sort(byName).map((a) => <option key={a.id} value={a.id}>{a.institution} · {a.name}</option>)}
         </select>
       </Field>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={autopay} onChange={(e) => setAutopay(e.target.checked)} className="w-4 h-4 accent-[#0e6b74]" /> Autopay is on</label>

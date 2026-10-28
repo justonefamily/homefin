@@ -247,7 +247,7 @@ function AccountForm({ acct, onClose, onSave, onDelete }: { acct?: Account; onCl
   return (
     <Modal open onClose={onClose} title={acct ? "Edit account" : "Add an account"}>
       <Field label="Type"><select className={selectCls} value={kind} onChange={(e) => setKind(e.target.value as AccountKind)}>
-        <option value="checking">Checking</option><option value="savings">Savings</option><option value="credit">Credit card</option><option value="loan">Loan</option><option value="mortgage">Mortgage</option><option value="biller">Biller (utility, phone, internet…)</option><option value="credit-score">Credit score</option>
+        <option value="biller">Biller (utility, phone, internet…)</option><option value="checking">Checking</option><option value="credit">Credit card</option><option value="credit-score">Credit score</option><option value="loan">Loan</option><option value="mortgage">Mortgage</option><option value="savings">Savings</option>
       </select></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Name"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Chase Sapphire" /></Field>

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Flag, Plus, Target } from "lucide-react";
 import { STRATEGIES } from "@/lib/strategies";
 import { useHome } from "@/store/useHome";
-import { Button, Card, Eyebrow, Field, Modal, cx, inputCls, money, selectCls } from "./ui";
+import { Button, Card, Eyebrow, Field, Modal, byName, cx, inputCls, money, selectCls } from "./ui";
 import { buildYearPlan, type PlanMonth } from "@/lib/yearplan";
 import { PlanBreakdown, type BreakdownKind } from "./PlanBreakdown";
 import type { Landmark, StrategyId, YearTargets } from "@/lib/types";
@@ -50,7 +50,7 @@ export function YearPlanView({ today }: { today: Date }) {
       <Card className="p-4 flex flex-col gap-3">
         <div className="flex items-center gap-2"><Target size={15} className="text-accent" /><div className="text-sm font-semibold">How we want {year} to go</div></div>
         <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Debt strategy" hint={STRATEGIES.find((x) => x.id === data.settings.strategy)?.headline}><select className={selectCls} value={data.settings.strategy} onChange={(e) => setStrategy(e.target.value as StrategyId)}>{STRATEGIES.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+          <Field label="Debt strategy" hint={STRATEGIES.find((x) => x.id === data.settings.strategy)?.headline}><select className={selectCls} value={data.settings.strategy} onChange={(e) => setStrategy(e.target.value as StrategyId)}>{[...STRATEGIES].sort(byName).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
           <Field label="Extra toward debt each month ($)"><input className={inputCls} type="number" inputMode="decimal" value={data.settings.extraPayment || ""} onChange={(e) => setExtra(Number(e.target.value) || 0)} /></Field>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

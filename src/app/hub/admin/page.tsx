@@ -77,14 +77,14 @@ function AppForm({ app, onClose, onSaved, onError }: { app?: HubApp; onClose: ()
       </div>
       <Field label="Icon">
         <div className="grid grid-cols-8 sm:grid-cols-10 gap-1.5">
-          {Object.entries(HUB_ICONS).map(([name, Icon]) => (
+          {Object.entries(HUB_ICONS).sort(([a], [b]) => a.localeCompare(b)).map(([name, Icon]) => (
             <button key={name} type="button" onClick={() => set({ icon: name })} aria-label={name} className={cx("h-10 rounded-[10px] border flex items-center justify-center", f.icon === name ? "border-ink bg-ink text-white" : "border-line bg-card hover:border-field")}><Icon size={18} /></button>
           ))}
         </div>
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Name"><input autoFocus className={inputCls} value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field>
-        <Field label="Status"><select className={selectCls} value={f.status} onChange={(e) => set({ status: e.target.value as HubApp["status"] })}><option value="live">Live</option><option value="beta">Beta</option><option value="soon">Coming soon</option><option value="hidden">Hidden</option></select></Field>
+        <Field label="Status"><select className={selectCls} value={f.status} onChange={(e) => set({ status: e.target.value as HubApp["status"] })}><option value="beta">Beta</option><option value="soon">Coming soon</option><option value="hidden">Hidden</option><option value="live">Live</option></select></Field>
       </div>
       <Field label="One line"><input className={inputCls} value={f.tagline} onChange={(e) => set({ tagline: e.target.value })} placeholder="What it does, in a sentence" /></Field>
       <Field label="Description"><textarea className={cx(inputCls, "h-auto py-2")} rows={3} value={f.description} onChange={(e) => set({ description: e.target.value })} /></Field>

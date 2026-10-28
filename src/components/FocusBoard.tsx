@@ -165,11 +165,11 @@ function WidgetEditor({ data, widget, onClose, onSave }: { data: HomeData; widge
   const [title, setTitle] = useState(widget?.title ?? "");
   const [w, setW] = useState<1 | 2 | 3>(widget?.w ?? 1);
   const scalarKind = isScalarKind(kind);
-  const sources = scalarKind ? SCALARS : SERIES;
+  const sources = [...(scalarKind ? SCALARS : SERIES)].sort((a, b) => a.name.localeCompare(b.name));
   const def = scalarKind ? scalar(source) : series(source);
   const validSource = sources.some((s) => s.id === source) ? source : sources[0].id;
   const params = (scalarKind ? scalar(validSource) : series(validSource))?.params?.(data) ?? [];
-  const groups = [...new Set(sources.map((s) => s.group))];
+  const groups = [...new Set(sources.map((s) => s.group))].sort();
   const preview: Widget = { id: widget?.id ?? "preview", kind, source: validSource, param: params.length ? param || params[0]?.id : undefined, target: customTarget || target, title: title || undefined, w };
   void def;
   return (
@@ -186,7 +186,7 @@ function WidgetEditor({ data, widget, onClose, onSave }: { data: HomeData; widge
       {kind === "gauge" && (
         <div className="grid grid-cols-2 gap-3">
           <Field label="Target"><select className={selectCls} value={customTarget ? "__custom" : target} onChange={(e) => { if (e.target.value === "__custom") setCustomTarget("1000"); else { setCustomTarget(""); setTarget(e.target.value); } }}>
-            {SCALARS.filter((s) => !s.params).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}<option value="__custom">A number I type…</option>
+            {[...SCALARS].filter((s) => !s.params).sort((a, b) => a.name.localeCompare(b.name)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}<option value="__custom">A number I type…</option>
           </select></Field>
           {customTarget && <Field label="Target amount"><input className={inputCls} type="number" value={customTarget} onChange={(e) => setCustomTarget(e.target.value)} /></Field>}
         </div>

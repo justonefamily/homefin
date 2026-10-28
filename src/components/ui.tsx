@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 
 export const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 export const money = (n: number) => `${n < 0 ? "−" : ""}$${fmt(Math.abs(n))}`;
+/** Alphabetical, case-insensitive — every category-style dropdown uses it. */
+export const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, "en", { sensitivity: "base" });
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
 export const Card = ({ children, className, dark }: { children: ReactNode; className?: string; dark?: boolean }) => (

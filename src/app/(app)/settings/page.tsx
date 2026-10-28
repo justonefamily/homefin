@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, Home, RotateCcw } from "lucide-react";
 import { useHome } from "@/store/useHome";
-import { Button, Card, Eyebrow, Field, Modal, Row, cx, inputCls, selectCls } from "@/components/ui";
+import { Button, Card, Eyebrow, Field, Modal, Row, byName, cx, inputCls, selectCls } from "@/components/ui";
 import { exportJson, importJson } from "@/lib/storage/local";
 import { InstallCard } from "@/components/PWA";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
@@ -111,7 +111,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between px-4 py-3 border-b border-line-soft"><div className="text-sm">Bill reminders</div>
               <select className={cx(selectCls, "w-36 h-9 text-xs")} value={data.settings.reminderDays} onChange={(e) => update((h) => ({ ...h, settings: { ...h.settings, reminderDays: Number(e.target.value) } }), "changed reminders")}>{[1, 2, 3, 5, 7].map((n) => <option key={n} value={n}>{n} day{n > 1 ? "s" : ""} before</option>)}</select></div>
             <div className="flex items-center justify-between px-4 py-3 border-b border-line-soft"><div className="text-sm">Default strategy</div>
-              <select className={cx(selectCls, "w-44 h-9 text-xs")} value={data.settings.strategy} onChange={(e) => update((h) => ({ ...h, settings: { ...h.settings, strategy: e.target.value as StrategyId } }), "changed strategy")}>{STRATEGIES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+              <select className={cx(selectCls, "w-44 h-9 text-xs")} value={data.settings.strategy} onChange={(e) => update((h) => ({ ...h, settings: { ...h.settings, strategy: e.target.value as StrategyId } }), "changed strategy")}>{[...STRATEGIES].sort(byName).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
             <div className="flex items-center justify-between px-4 py-3"><div className="text-sm">Everyday spending estimate</div>
               <div className="flex items-center gap-1 text-sm">$<input type="number" className={cx(inputCls, "w-24 h-9 text-xs")} value={data.settings.everydaySpend || ""} onChange={(e) => update((h) => ({ ...h, settings: { ...h.settings, everydaySpend: Number(e.target.value) } }), "changed everyday spend")} aria-label="Everyday spending per month" />/mo</div></div>
           </Card>
