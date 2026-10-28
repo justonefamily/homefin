@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, CalendarDays, CreditCard, Home, Settings, TrendingUp, Cloud, CloudOff, Loader2 } from "lucide-react";
+import { BarChart3, CalendarDays, CalendarCheck, CreditCard, Home, Settings, TrendingUp, Cloud, CloudOff, Loader2 } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
 import { SupabaseAdapter } from "@/lib/storage/supabase";
@@ -15,6 +15,7 @@ const NAV = [
   { href: "/", label: "Home", icon: Home },
   { href: "/bills", label: "Bills", icon: CalendarDays },
   { href: "/plan", label: "Plan", icon: TrendingUp },
+  { href: "/calendar", label: "Calendar", icon: CalendarCheck },
   { href: "/insights", label: "Insights", icon: BarChart3 },
   { href: "/accounts", label: "Accounts", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -104,7 +105,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </main>
 
       {/* Mobile bottom tabs */}
-      <nav aria-label="Main" className="md:hidden fixed bottom-0 inset-x-0 bg-card border-t border-line grid grid-cols-6 px-1 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
+      <nav aria-label="Main" className="md:hidden fixed bottom-0 inset-x-0 bg-card border-t border-line grid grid-cols-7 px-0.5 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
         {NAV.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? path === "/" : path.startsWith(href);
           return (

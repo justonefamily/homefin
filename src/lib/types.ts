@@ -132,6 +132,39 @@ export interface Landmark {
   category?: string;
 }
 
+export type Course = "main" | "side" | "meat" | "veggie" | "dessert" | "drink";
+
+/** A favorite dish — the household's own menu, itemized by course. Feeds the meal dropdowns on the calendar. */
+export interface Dish {
+  id: string;
+  name: string;
+  course: Course;
+  /** e.g. ["healthy", "quick", "kid-friendly"] */
+  tags?: string[];
+  notes?: string;
+  /** Optional link to a recipe. */
+  url?: string;
+}
+
+/** One course inside a planned meal: "sides: rice, beans". Multiple per course allowed. */
+export interface MealComponent { course: Course; dishId: string; }
+
+export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
+
+/** Something planned on the home calendar: a meal (from a dish), a project, or an event. */
+export interface CalendarItem {
+  id: string;
+  date: string; // YYYY-MM-DD
+  kind: "meal" | "project" | "event";
+  slot?: MealSlot;      // meals only
+  dishId?: string;      // the main dish (from the library)
+  components?: MealComponent[]; // sides, meats, veggies, desserts, drinks that go with it
+  title: string;        // main dish name snapshot, or the project/event name
+  notes?: string;
+  done?: boolean;       // projects/events (and "cooked" for meals)
+  assignee?: string;    // a member's name
+}
+
 export interface HomeData {
   version: 1;
   homeName: string;
@@ -146,6 +179,8 @@ export interface HomeData {
   income?: IncomeEvent[];
   incomeSources?: IncomeSource[];
   landmarks?: Landmark[];
+  dishes?: Dish[];
+  calendar?: CalendarItem[];
   /** The Focus board: widgets the household composed. See lib/widgets.ts. */
   dashboard?: { widgets: import("./widgets").Widget[] };
   /** True once the welcome screen has been completed, so an empty-but-created home opens straight into the app. */
