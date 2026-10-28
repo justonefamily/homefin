@@ -34,7 +34,7 @@ export function YearPlanView({ today }: { today: Date }) {
     <div className="flex flex-col gap-4">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-accent">Year plan</div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-accent">Yearly planner</div>
           <div className="text-[34px] font-bold tracking-tight leading-none">{year}</div>
         </div>
         <div className="flex items-center gap-2">
