@@ -144,6 +144,8 @@ export interface Dish {
   notes?: string;
   /** Optional link to a recipe. */
   url?: string;
+  /** What you need to make it — feeds the grocery list. */
+  ingredients?: string[];
 }
 
 /** One course inside a planned meal: "sides: rice, beans". Multiple per course allowed. */
@@ -181,6 +183,8 @@ export interface HomeData {
   landmarks?: Landmark[];
   dishes?: Dish[];
   calendar?: CalendarItem[];
+  /** Grocery list state per week (key = YYYY-MM-DD of the Sunday): items checked off, and extras typed by hand. */
+  grocery?: Record<string, { checked: string[]; extras: string[] }>;
   /** The Focus board: widgets the household composed. See lib/widgets.ts. */
   dashboard?: { widgets: import("./widgets").Widget[] };
   /** True once the welcome screen has been completed, so an empty-but-created home opens straight into the app. */
