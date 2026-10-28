@@ -161,8 +161,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
           {shown.map((t) => { const a = data.accounts.find((x) => x.id === t.accountId); return (
             <div key={t.id}>
             <div className={cx("flex items-center gap-2 px-3 py-2 border-b border-line-soft text-[12px]", findFlag(data, "transaction", t.id) && "bg-amber-bg/60", t.merchantOverride && "border-l-2 border-l-accent")}>
-              <div className="w-20 shrink-0 text-muted">{day(t.date).replace(/, \d{4}$/, "")}</div>
-              <div className="flex-1 min-w-0 truncate">{t.description}{a && <span className="text-muted"> · {a.name}</span>}</div>
+              <div className="flex-1 min-w-0"><div className="break-words leading-snug">{t.description}</div><div className="text-[11px] text-muted">{day(t.date)}{a ? ` · ${a.institution} · ${a.name}` : ""}</div></div>
               <div className="font-semibold">{money(t.amount)}</div>
               <FlagButton kind="transaction" refId={t.id} label={`${displayName} · ${money(t.amount)} · ${day(t.date)}`} compact />
               <button onClick={() => { setMoving(moving === t.id ? null : t.id); setMoveQuery(""); }} aria-label="Move this transaction" aria-expanded={moving === t.id} className={cx("w-7 h-7 rounded-full flex items-center justify-center shrink-0", moving === t.id ? "bg-ink text-white" : "text-muted-3 hover:bg-surface hover:text-ink")}><MoreHorizontal size={14} /></button>
