@@ -42,3 +42,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ dishes: fallback, ai: false, error: (e as Error).message });
   }
 }
+
+/** GET ?names=tacos,rice → same as POST; handy for checking the route in a browser. */
+export async function GET(req: Request) {
+  const names = (new URL(req.url).searchParams.get("names") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return POST(new Request(req.url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ names }) }));
+}
