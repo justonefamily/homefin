@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
-import { EyeOff, Merge, Receipt, Search, Shuffle, Undo2, Ban, Check } from "lucide-react";
+import { EyeOff, Merge, Receipt, Search, Shuffle, Undo2, Ban, Check, Flag } from "lucide-react";
+import { findFlag, toggleFlag } from "@/lib/flags";
 import { useHome } from "@/store/useHome";
 import { useItem } from "@/store/useItem";
 import { Button, Field, Modal, cx, inputCls, money, selectCls } from "./ui";
@@ -77,6 +78,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
 
   return (
     <Modal open onClose={onClose} title={displayName}>
+      <FlagButton kind="merchant" refId={key} label={displayName} />
       {/* What the bank says */}
       {mergedAway && <div className="rounded-[12px] border border-amber-line bg-amber-bg px-3 py-2 text-[12px] flex items-center gap-2"><span className="flex-1">This is merged into <b>{displayName}</b>.</span><button onClick={() => update((h) => unmergeMerchant(h, mergedAway), `unmerged ${mergedAway}`)} className="h-7 px-2.5 rounded-[8px] bg-amber text-white text-[11px] font-semibold">Unmerge</button></div>}
       {rawNames.length > 0 && <div className="text-[12px] text-muted -mt-2 leading-snug">On your statement as <span className="text-ink font-medium">{rawNames.slice(0, 3).join(" · ")}</span>{rawNames.length > 3 ? ` and ${rawNames.length - 3} more` : ""}</div>}
@@ -122,10 +124,11 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
         <div className="max-h-56 overflow-y-auto">
           {txs.length === 0 && <div className="px-3 py-3 text-[12px] text-muted">No bank transactions matched to this yet{bill ? " — it was added by hand, or the bank hasn't shown a payment under this name" : ""}.</div>}
           {shown.map((t) => { const a = data.accounts.find((x) => x.id === t.accountId); return (
-            <div key={t.id} className="flex items-center gap-3 px-3 py-2 border-b border-line-soft last:border-b-0 text-[12px]">
-              <div className="w-24 shrink-0 text-muted">{day(t.date)}</div>
+            <div key={t.id} className={cx("flex items-center gap-2 px-3 py-2 border-b border-line-soft last:border-b-0 text-[12px]", findFlag(data, "transaction", t.id) && "bg-amber-bg/60")}>
+              <div className="w-20 shrink-0 text-muted">{day(t.date).replace(/, \d{4}$/, "")}</div>
               <div className="flex-1 min-w-0 truncate">{t.description}{a && <span className="text-muted"> · {a.name}</span>}</div>
               <div className="font-semibold">{money(t.amount)}</div>
+              <FlagButton kind="transaction" refId={t.id} label={`${displayName} · ${money(t.amount)} · ${day(t.date)}`} compact />
             </div>); })}
           {txs.length > 8 && <button onClick={() => setShowAll(!showAll)} className="w-full text-left px-3 py-2 text-[12px] font-semibold text-accent">{showAll ? "Show fewer" : `Show all ${txs.length}`}</button>}
         </div>
@@ -159,6 +162,20 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   );
 }
 
+/** Flag / unflag something for the review queue (Money → Flags). */
+function FlagButton({ kind, refId, label, compact }: { kind: "merchant" | "transaction" | "deposit"; refId: string; label: string; compact?: boolean }) {
+  const { data: d, update } = useHome();
+  const data = d!;
+  const on = !!findFlag(data, kind, refId);
+  const toggle = () => update((h) => toggleFlag(h, kind, refId, label, uid()), on ? `unflagged ${label}` : `flagged ${label}`);
+  if (compact) return <button onClick={toggle} aria-pressed={on} aria-label={on ? "Remove flag" : "Flag for later"} className={cx("w-7 h-7 rounded-full flex items-center justify-center shrink-0", on ? "bg-amber text-white" : "text-muted-3 hover:bg-surface hover:text-amber")}><Flag size={13} /></button>;
+  return (
+    <button onClick={toggle} aria-pressed={on} className={cx("-mt-2 self-start inline-flex items-center gap-1.5 rounded-full border text-[11px] font-semibold px-2.5 py-1", on ? "bg-amber border-amber text-white" : "border-amber-line bg-amber-bg text-amber hover:bg-amber/15")}>
+      <Flag size={12} /> {on ? "Flagged — in your review queue" : "Flag for later"}
+    </button>
+  );
+}
+
 /** The item page for a deposit: what landed, where, and what you've said about it. */
 export function DepositSheet({ event, onClose }: { event: IncomeEvent; onClose: () => void }) {
   const { data: d, update } = useHome();
@@ -172,6 +189,7 @@ export function DepositSheet({ event, onClose }: { event: IncomeEvent; onClose: 
   const status = event.internal ? "Transfer between your accounts (matched to a withdrawal)" : event.sourceId ? `Counted · ${src?.name ?? "income source"}` : event.status === "refund" ? "Refund — offsets spending, not income" : event.status === "ignored" ? "Ignored (not income)" : event.status === "counted" ? "Counted as income" : "Not reviewed yet";
   return (
     <Modal open onClose={onClose} title={event.source}>
+      <FlagButton kind="deposit" refId={event.id} label={`${event.source} · ${money(event.amount)} · ${day(event.date)}`} />
       <div className={cx("rounded-[12px] px-3 py-2 text-[12px] font-semibold -mt-1", event.status === "ignored" || event.internal ? "bg-surface text-muted" : event.status || event.sourceId ? "bg-accent-bg text-accent" : "bg-amber-bg text-amber")}>{status}</div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Fact label="Amount">{money(event.amount)}</Fact>

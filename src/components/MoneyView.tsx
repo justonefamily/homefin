@@ -4,8 +4,11 @@ import { ChevronLeft, ChevronRight, ArrowDownLeft, ArrowUpRight, Merge, Search, 
 import { addDays, addMonths, endOfMonth, getDaysInMonth, startOfMonth, startOfWeek } from "date-fns";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Segmented, cx, inputCls, money } from "./ui";
-import { flowFor, merchantSummaries, mergeMerchants, similarMerchants, type FlowLine, type MerchantSummary } from "@/lib/merchants";
-import { ItemSheet } from "./ItemSheet";
+import { flowFor, merchantSummaries, mergeMerchants, similarMerchants, txKey, type FlowLine, type MerchantSummary } from "@/lib/merchants";
+import { ItemSheet, DepositSheet } from "./ItemSheet";
+import { openFlags, removeFlag, resolveFlag, setFlagNote } from "@/lib/flags";
+import { Flag as FlagIcon, Check, Trash2 } from "lucide-react";
+import type { IncomeEvent } from "@/lib/types";
 import { ymd } from "@/lib/calendar";
 import { currentPeriodRange, shiftPeriod } from "@/lib/projections";
 import type { HomeData } from "@/lib/types";
@@ -30,14 +33,17 @@ function rangeFor(data: HomeData, today: Date, kind: Range, offset: number): { f
 }
 
 export function MoneyView({ today }: { today: Date }) {
-  const [tab, setTab] = useState<"flow" | "everyday" | "merchants">(typeof location !== "undefined" && location.hash === "#everyday" ? "everyday" : "flow");
+  const data = useHome((s) => s.data)!;
+  const flagged = openFlags(data).length;
+  const [tab, setTab] = useState<"flow" | "everyday" | "merchants" | "flags">(typeof location !== "undefined" && location.hash === "#everyday" ? "everyday" : typeof location !== "undefined" && location.hash === "#flags" ? "flags" : "flow");
   return (
     <>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">Money</h1>
-        <div className="w-full sm:w-80"><Segmented size="sm" value={tab} onChange={setTab} options={[{ id: "flow", label: "In & out" }, { id: "everyday", label: "Everyday" }, { id: "merchants", label: "Merchants" }]} /></div>
+        <div className="w-full sm:w-[26rem]"><Segmented size="sm" value={tab} onChange={setTab} options={[{ id: "flow", label: "In & out" }, { id: "everyday", label: "Everyday" }, { id: "merchants", label: "Merchants" }, { id: "flags", label: flagged ? `Flags · ${flagged}` : "Flags" }]} /></div>
       </div>
       {tab === "flow" && <FlowView today={today} />}
+      {tab === "flags" && <FlagsView />}
       {tab === "everyday" && <EverydayView today={today} />}
       {tab === "merchants" && <MerchantsView today={today} />}
     </>
@@ -294,6 +300,56 @@ function EverydayView({ today }: { today: Date }) {
         </Card>
       ))}
       {pick && <ItemSheet merchantKey={pick} onClose={() => setPick(null)} />}
+    </>
+  );
+}
+
+
+/* ------------------------------ Flags ------------------------------ */
+
+/** The review queue: everything flagged from an item page, with a note, a way back to the item, and a check-off. */
+function FlagsView() {
+  const { data: d, update } = useHome();
+  const data = d!;
+  const open = openFlags(data);
+  const done = (data.flags ?? []).filter((f) => f.done).sort((a, b) => b.at.localeCompare(a.at));
+  const [showDone, setShowDone] = useState(false);
+  const [pick, setPick] = useState<string | null>(null);
+  const [deposit, setDeposit] = useState<IncomeEvent | null>(null);
+  const openItem = (f: { kind: string; ref: string }) => {
+    if (f.kind === "deposit") { const e = (data.income ?? []).find((x) => x.id === f.ref); if (e) setDeposit(e); return; }
+    if (f.kind === "transaction") { const t = data.transactions.find((x) => x.id === f.ref); if (t) setPick(txKey(data, t)); return; }
+    setPick(f.ref);
+  };
+  const Row = ({ f }: { f: NonNullable<typeof data.flags>[number] }) => (
+    <div className={cx("flex flex-col gap-2 px-4 py-3 border-b border-line-soft last:border-b-0", f.done && "opacity-60")}>
+      <div className="flex items-start gap-3">
+        <button onClick={() => update((h) => resolveFlag(h, f.id, !f.done), f.done ? "reopened a flag" : "resolved a flag")} aria-label={f.done ? "Reopen" : "Mark reviewed"} className={cx("mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0", f.done ? "bg-green border-green text-white" : "border-chip hover:border-green")}>{f.done && <Check size={13} strokeWidth={3} />}</button>
+        <button onClick={() => openItem(f)} className="flex-1 min-w-0 text-left">
+          <div className={cx("text-[13px] font-semibold truncate", f.done && "line-through")}>{f.label}</div>
+          <div className="text-[11px] text-muted">{{ merchant: "Merchant", transaction: "One transaction", deposit: "Deposit" }[f.kind]} · flagged {new Date(f.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · <span className="text-accent font-semibold">open</span></div>
+        </button>
+        <button onClick={() => update((h) => removeFlag(h, f.id), "removed a flag")} aria-label="Remove flag" className="w-8 h-8 rounded-full flex items-center justify-center text-muted-3 hover:text-red hover:bg-surface shrink-0"><Trash2 size={14} /></button>
+      </div>
+      {!f.done && <input defaultValue={f.note ?? ""} placeholder="Why it's flagged / what to check…" onBlur={(e) => e.target.value !== (f.note ?? "") && update((h) => setFlagNote(h, f.id, e.target.value), "flag note")} className="ml-9 h-9 rounded-[10px] border border-line bg-card px-3 text-[12px] outline-none focus:border-accent" />}
+      {f.done && f.note && <div className="ml-9 text-[12px] text-muted">{f.note}</div>}
+    </div>
+  );
+  return (
+    <>
+      <div className="text-[13px] text-muted leading-snug">Anything you flagged from an item page lands here until you check it off. Tap the name to reopen the item; add a note so you remember what to look at.</div>
+      <Card>
+        {open.length === 0 && <div className="px-4 py-6 text-sm text-muted text-center flex flex-col items-center gap-2"><FlagIcon size={18} className="text-muted-3" />Nothing flagged. Open any item page and tap <b>Flag for later</b>.</div>}
+        {open.map((f) => <Row key={f.id} f={f} />)}
+      </Card>
+      {done.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <button onClick={() => setShowDone(!showDone)} className="text-xs text-muted text-left">{done.length} reviewed · <span className="text-accent font-semibold">{showDone ? "hide" : "show"}</span></button>
+          {showDone && <Card>{done.map((f) => <Row key={f.id} f={f} />)}</Card>}
+        </div>
+      )}
+      {pick && <ItemSheet merchantKey={pick} onClose={() => setPick(null)} />}
+      {deposit && <DepositSheet event={deposit} onClose={() => setDeposit(null)} />}
     </>
   );
 }

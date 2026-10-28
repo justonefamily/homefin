@@ -11,7 +11,8 @@ import { PeriodToggle } from "@/components/PeriodToggle";
 import { Card, Mark, Row, SectionTitle, cx, fmt, money } from "@/components/ui";
 import { billsInRange, currentPeriodRange, periodsTouching, weeklyProjection } from "@/lib/projections";
 import { debtsFromAccounts, simulatePayoff, strategyMeta } from "@/lib/strategies";
-import { CreditCard, BarChart3, CalendarDays, Sparkles } from "lucide-react";
+import { CreditCard, BarChart3, CalendarDays, Sparkles, Flag } from "lucide-react";
+import { openFlags } from "@/lib/flags";
 import { detectIncome, detectRecurring, expectedMonthlyIncome, matchIncomeEvents, merchantKey, suggestionToSource } from "@/lib/detect";
 import { uid } from "@/lib/storage/adapter";
 
@@ -19,6 +20,7 @@ export default function HomePage() {
   const { data: d, update } = useHome();
   const data = d!;
   const openItem = useItem((s) => s.openItem);
+  const flagged = openFlags(data).length;
   const today = useToday();
   const params = useSearchParams();
   const [tab, setTab] = useState<"today" | "focus">(params.get("view") === "focus" ? "focus" : "today");
@@ -109,6 +111,7 @@ export default function HomePage() {
         </div>
 
         <div className="md:col-span-7 flex flex-col gap-4">
+          {flagged > 0 && <Link href="/money#flags" className="block"><Card className="p-3.5 flex items-center gap-2.5 border-amber-line bg-amber-bg/50 hover:border-amber"><Flag size={16} className="text-amber shrink-0" /><div className="text-[13px]"><b>{flagged} item{flagged === 1 ? "" : "s"} flagged</b> for review.</div><div className="ml-auto text-xs text-amber font-semibold">Review ›</div></Card></Link>}
           <SectionTitle action={<Link href="/bills" className="text-[13px] font-semibold text-accent">See calendar</Link>}>Due in this period</SectionTitle>
           <Card>
             {upcoming.length === 0 && <div className="p-4 text-sm text-muted">No bills in this period.</div>}

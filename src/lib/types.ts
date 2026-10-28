@@ -214,6 +214,9 @@ export interface CalendarItem {
   assignee?: string;    // a member's name
 }
 
+/** A "look at this later" marker. `ref` is the merchant key, transaction id, or deposit id. */
+export interface Flag { id: string; kind: "merchant" | "transaction" | "deposit"; ref: string; label: string; note?: string; at: string; done?: boolean }
+
 export interface HomeData {
   version: 1;
   homeName: string;
@@ -232,6 +235,8 @@ export interface HomeData {
   calendar?: CalendarItem[];
   /** Grocery list state per week (key = YYYY-MM-DD of the Sunday): items checked off, and extras typed by hand. */
   grocery?: Record<string, { checked: string[]; extras: string[] }>;
+  /** Things flagged for a later look: a whole merchant, one transaction, or one deposit. */
+  flags?: Flag[];
   /** The Focus board: widgets the household composed. See lib/widgets.ts. */
   dashboard?: { widgets: import("./widgets").Widget[] };
   /** True once the welcome screen has been completed, so an empty-but-created home opens straight into the app. */
