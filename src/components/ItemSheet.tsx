@@ -5,7 +5,7 @@ import { findFlag, toggleFlag } from "@/lib/flags";
 import { useHome } from "@/store/useHome";
 import { useItem } from "@/store/useItem";
 import { Button, Field, Modal, byName, cx, inputCls, money, selectCls } from "./ui";
-import { billKeyMap, merchantSummaries, merchantToBill, mergeMerchants, moveTransaction, prefFor, resolveKey, setMerchantPref, txKey, unmergeMerchant } from "@/lib/merchants";
+import { billKeyMap, merchantSummaries, merchantToBill, mergeMerchants, moveTransaction, prefFor, resolveKey, setMerchantPref, splitStatementName, txKey, unmergeMerchant } from "@/lib/merchants";
 import { NATURE_LABEL, parseNature } from "@/lib/nature";
 import { MoreHorizontal } from "lucide-react";
 import { autoMarkPaid, detectRecurring, merchantKey, p2pLabel, suggestionToBill } from "@/lib/detect";
@@ -54,6 +54,14 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const [moving, setMoving] = useState<string | null>(null); // transaction id being moved
   const [moveQuery, setMoveQuery] = useState("");
   const nature = rawNames[0] ? parseNature(rawNames[0]) : null;
+  // "On your statement": every distinct wording, as a checklist. Unchecked ones get split out into their own merchant on Save.
+  const wordings = useMemo(() => { const m = new Map<string, { count: number; total: number; last: string }>(); for (const t of txs) { const e = m.get(t.description) ?? { count: 0, total: 0, last: t.date }; e.count++; e.total += t.amount; if (t.date > e.last) e.last = t.date; m.set(t.description, e); } return [...m.entries()].map(([desc, v]) => ({ desc, ...v })).sort((a, b) => b.count - a.count || b.total - a.total); }, [txs]);
+  const [showWordings, setShowWordings] = useState(false);
+  const [keep, setKeep] = useState<Set<string> | null>(null); // null = everything checked
+  const kept = keep ?? new Set(wordings.map((w) => w.desc));
+  const toggleKeep = (desc: string) => { const n = new Set(kept); if (n.has(desc)) n.delete(desc); else n.add(desc); setKeep(n); };
+  const removed = wordings.filter((w) => !kept.has(w.desc));
+  const saveWordings = () => { update((h) => { let next = h; for (const w of removed) { const n = parseNature(w.desc); next = splitStatementName(next, key, w.desc, p2pLabel(w.desc) ?? (n.nature !== "other" ? n.label : undefined)); } return next; }, `split ${removed.length} wording${removed.length === 1 ? "" : "s"} out of ${displayName}`); setKeep(null); setShowWordings(false); };
   const catName = (id: string) => data.budgets.find((b) => b.id === id)?.name ?? "Other";
   const status = pref.kind === "ignore" ? "Hidden" : pref.kind === "transfer" || (txs[0]?.transfer && pref.kind !== "spend") ? "Transfer between your accounts" : bill ? `Bill · ${bill.name}` : me?.kind === "reimbursable" ? "Reimbursable — money comes back" : dismissed ? "Not a bill (you said)" : suggestion ? "Looks like a bill — not confirmed" : "Everyday spending";
 
@@ -86,7 +94,29 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
       <FlagButton kind="merchant" refId={key} label={displayName} />
       {/* What the bank says */}
       {mergedAway && <div className="rounded-[12px] border border-amber-line bg-amber-bg px-3 py-2 text-[12px] flex items-center gap-2"><span className="flex-1">This is merged into <b>{displayName}</b>.</span><button onClick={() => update((h) => unmergeMerchant(h, mergedAway), `unmerged ${mergedAway}`)} className="h-7 px-2.5 rounded-[8px] bg-amber text-white text-[11px] font-semibold">Unmerge</button></div>}
-      {rawNames.length > 0 && <div className="text-[12px] text-muted -mt-2 leading-snug">On your statement as <span className="text-ink font-medium">{rawNames.slice(0, 3).join(" · ")}</span>{rawNames.length > 3 ? ` and ${rawNames.length - 3} more` : ""}</div>}
+      {wordings.length > 0 && (
+        <div className="rounded-[12px] border border-line overflow-hidden -mt-1">
+          <button onClick={() => setShowWordings(!showWordings)} aria-expanded={showWordings} className="w-full flex items-center justify-between px-3 py-2 text-[12px] bg-surface text-left">
+            <span><span className="text-muted">On your statement as</span> <span className="font-medium">{wordings[0].desc.length > 48 ? wordings[0].desc.slice(0, 48) + "…" : wordings[0].desc}</span>{wordings.length > 1 && <span className="text-muted"> and {wordings.length - 1} other wording{wordings.length === 2 ? "" : "s"}</span>}</span>
+            <span className="text-accent font-semibold shrink-0 ml-2">{showWordings ? "Hide" : "View & edit"}</span>
+          </button>
+          {showWordings && (
+            <div className="border-t border-line">
+              <div className="flex items-center justify-between px-3 py-2 text-[11px] text-muted border-b border-line-soft"><span>Checked = stays part of <b>{displayName}</b>. Uncheck what doesn&apos;t belong, then save.</span><span className="flex gap-2 shrink-0"><button onClick={() => setKeep(new Set(wordings.map((w) => w.desc)))} className="text-accent font-semibold">All</button><button onClick={() => setKeep(new Set())} className="text-accent font-semibold">None</button></span></div>
+              <div className="max-h-64 overflow-y-auto">
+                {wordings.map((w) => (
+                  <label key={w.desc} className={cx("flex items-start gap-3 px-3 py-2 border-b border-line-soft last:border-b-0 text-[12px] cursor-pointer", !kept.has(w.desc) && "bg-amber-bg/50")}>
+                    <input type="checkbox" checked={kept.has(w.desc)} onChange={() => toggleKeep(w.desc)} className="mt-0.5 w-4 h-4 accent-[#0e6b74] shrink-0" />
+                    <span className="flex-1 min-w-0 break-words">{w.desc}</span>
+                    <span className="shrink-0 text-right text-muted">{w.count}× · <span className="text-ink font-semibold">{money(w.total)}</span></span>
+                  </label>
+                ))}
+              </div>
+              {removed.length > 0 && <div className="flex items-center gap-2 px-3 py-2 bg-amber-bg/40 border-t border-line text-[12px]"><span className="flex-1">{removed.length} wording{removed.length === 1 ? "" : "s"} ({removed.reduce((s, w) => s + w.count, 0)} transaction{removed.reduce((s, w) => s + w.count, 0) === 1 ? "" : "s"}) will become their own items.</span><Button onClick={saveWordings} className="h-8 px-3 text-xs">Save</Button></div>}
+            </div>
+          )}
+        </div>
+      )}
       <div className={cx("rounded-[12px] px-3 py-2 text-[12px] font-semibold", bill ? "bg-accent-bg text-accent" : dismissed ? "bg-surface text-muted" : suggestion ? "bg-amber-bg text-amber" : "bg-surface text-ink")}>{status}{nature && nature.nature !== "other" && nature.nature !== "card" && <span className="font-normal text-muted"> · reads as {nature.label.toLowerCase()}</span>}</div>
       {me && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-3">

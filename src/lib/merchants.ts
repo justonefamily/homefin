@@ -40,6 +40,14 @@ export function classify(data: HomeData, t: Transaction, billKeys: Map<string, B
   return { kind: "spend", key };
 }
 
+/** Split every transaction with this exact statement wording out of `fromKey` into its own merchant. */
+export function splitStatementName(data: HomeData, fromKey: string, description: string, label?: string): HomeData {
+  const slug = "split:" + description.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  const transactions = data.transactions.map((t) => (t.description === description && txKey(data, t) === fromKey ? { ...t, merchantOverride: slug } : t));
+  const pref = data.settings.merchants?.[slug] ?? {};
+  return { ...data, transactions, settings: { ...data.settings, merchants: { ...(data.settings.merchants ?? {}), [slug]: { ...pref, name: pref.name ?? label } } } };
+}
+
 /** Move one transaction to another merchant (or, with `tx:<id>`, make it stand on its own). Pass undefined to put it back. */
 export const moveTransaction = (data: HomeData, txId: string, toKey: string | undefined): HomeData =>
   ({ ...data, transactions: data.transactions.map((t) => (t.id === txId ? { ...t, merchantOverride: toKey } : t)) });
