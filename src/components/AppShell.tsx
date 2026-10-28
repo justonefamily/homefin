@@ -10,7 +10,7 @@ import { LocalAdapter } from "@/lib/storage/local";
 import { Button, Card, cx } from "./ui";
 import { importJson } from "@/lib/storage/local";
 import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
-import { matchInternalTransfers } from "@/lib/merchants";
+import { dedupeIncome, matchInternalTransfers } from "@/lib/merchants";
 
 const NAV = [
   { href: "/", label: "Home", icon: Home },
@@ -39,8 +39,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Pair deposits with matching outflows across accounts (internal transfers) for data synced before this existed.
   useEffect(() => {
     if (!data) return;
-    const next = matchInternalTransfers(data);
-    if (next) update(() => next, "matched transfers between your accounts");
+    const deduped = dedupeIncome(data);
+    const next = matchInternalTransfers(deduped ?? data) ?? deduped;
+    if (next) update(() => next, deduped ? "removed duplicate deposits" : "matched transfers between your accounts");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.transactions.length, data?.income?.length]);
   const [booted, setBooted] = useState(false);

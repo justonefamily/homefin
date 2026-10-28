@@ -41,6 +41,7 @@ export async function DELETE(req: Request) {
       accounts: home.accounts.filter((a) => !gone.has(a.id)),
       transactions: home.transactions.filter((t) => !t.accountId || !gone.has(t.accountId)),
       balanceHistory: (home.balanceHistory ?? []).filter((b) => !gone.has(b.accountId)),
+      income: (home.income ?? []).filter((e) => !e.accountId || !gone.has(e.accountId)),
       bills: home.bills.map((b) => (b.accountId && gone.has(b.accountId) ? { ...b, accountId: undefined } : b)),
     };
     const { error } = await ctx.sb.from("home_data").update({ data: next, note: `disconnected ${it.institution ?? "bank"}` }).eq("home_id", ctx.homeId);

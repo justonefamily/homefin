@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyHome } from "./types";
-import { flowFor, matchInternalTransfers, merchantSummaries, mergeMerchants, setMerchantPref, similarMerchants } from "./merchants";
+import { dedupeIncome, flowFor, matchInternalTransfers, merchantSummaries, mergeMerchants, setMerchantPref, similarMerchants } from "./merchants";
 import { detectRecurring } from "./detect";
 
 const home = () => {
@@ -72,5 +72,21 @@ describe("internal transfers", () => {
   });
   it("leaves a real deposit alone", () => {
     expect(matchInternalTransfers(home())).toBeNull();
+  });
+});
+
+describe("dedupeIncome", () => {
+  it("drops the same deposit recorded twice, keeps the reviewed copy, leaves separate accounts alone", () => {
+    const h = home();
+    h.income = [
+      { id: "a", date: "2026-10-15", amount: 5500, source: "FLORA COL PAYROLL" },
+      { id: "b", date: "2026-10-15", amount: 5500, source: "FLORA COL PAYROLL", status: "counted" },
+      { id: "c", date: "2026-10-15", amount: 4000.36, source: "FLORA COL PAYROLL L", accountId: "chk" },
+      { id: "d", date: "2026-10-15", amount: 4000.36, source: "FLORA COL PAYROLL L", accountId: "cc" },
+      { id: "e", date: "2026-10-01", amount: 0.01, source: "Bright Money" },
+    ];
+    const next = dedupeIncome(h)!;
+    expect(next.income!.map((e) => e.id)).toEqual(["b", "c", "d", "e"]);
+    expect(dedupeIncome(next)).toBeNull();
   });
 });

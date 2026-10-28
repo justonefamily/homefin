@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { mergeAccounts, mergeTransactions, plaid, plaidError } from "@/lib/plaid";
 import { autoMarkPaid, matchIncomeEvents } from "@/lib/detect";
-import { matchInternalTransfers } from "@/lib/merchants";
+import { dedupeIncome, matchInternalTransfers } from "@/lib/merchants";
 import { adminClient } from "@/lib/supabase/server";
 import { CountryCode } from "plaid";
 import type { HomeData } from "@/lib/types";
@@ -78,6 +78,7 @@ export async function POST() {
     }
   }
 
+  home = dedupeIncome(home) ?? home;
   home = matchInternalTransfers(home) ?? home;
   const matched = matchIncomeEvents(home);
   if (matched) home = { ...home, income: matched };

@@ -244,3 +244,32 @@ export function matchInternalTransfers(data: HomeData, windowDays = TRANSFER_WIN
   }
   return changed ? { ...data, income, transactions: txs } : null;
 }
+
+/* ------------------------------ Duplicate deposits ------------------------------ */
+
+/**
+ * The same deposit recorded twice — it happens when a bank was linked twice and the older link was removed
+ * before deposits carried an account id, or when Plaid re-issues an id. Two deposits are the same when they
+ * share date, amount and description and we can't tell they landed in different accounts. Keeps the reviewed
+ * copy (attached to a source, or counted/ignored) and drops the rest. Returns null when nothing changed.
+ */
+export function dedupeIncome(data: HomeData): HomeData | null {
+  const groups = new Map<string, number[]>();
+  const income = data.income ?? [];
+  income.forEach((e, i) => { const k = `${e.date}|${e.amount.toFixed(2)}|${e.source.trim().toLowerCase()}`; (groups.get(k) ?? groups.set(k, []).get(k)!).push(i); });
+  const drop = new Set<number>();
+  for (const idx of groups.values()) {
+    if (idx.length < 2) continue;
+    // Different known accounts → genuinely separate deposits (same paycheck split two ways, say).
+    const byAcct = new Map<string, number[]>();
+    for (const i of idx) { const a = income[i].accountId ?? ""; (byAcct.get(a) ?? byAcct.set(a, []).get(a)!).push(i); }
+    const pools = byAcct.has("") ? [idx] : [...byAcct.values()]; // unknown account: treat the whole group as one
+    for (const pool of pools) {
+      if (pool.length < 2) continue;
+      const rank = (i: number) => (income[i].sourceId ? 3 : 0) + (income[i].status ? 2 : 0) + (income[i].accountId ? 1 : 0);
+      const keep = pool.slice().sort((a, b) => rank(b) - rank(a))[0];
+      for (const i of pool) if (i !== keep) drop.add(i);
+    }
+  }
+  return drop.size ? { ...data, income: income.filter((_, i) => !drop.has(i)) } : null;
+}
