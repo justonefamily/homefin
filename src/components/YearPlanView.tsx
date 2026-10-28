@@ -1,16 +1,17 @@
 "use client";
 import { useState } from "react";
-import { Flag, Plus } from "lucide-react";
+import { Flag, Plus, Target } from "lucide-react";
+import { STRATEGIES } from "@/lib/strategies";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Field, Modal, cx, inputCls, money, selectCls } from "./ui";
 import { buildYearPlan } from "@/lib/yearplan";
-import type { Landmark } from "@/lib/types";
+import type { Landmark, StrategyId, YearTargets } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
 
 export function YearPlanView({ today }: { today: Date }) {
   const { data: d, update } = useHome();
   const data = d!;
-  const [year, setYear] = useState(today.getFullYear() + 1);
+  const [year, setYear] = useState(today.getFullYear());
   const [withStart, setWithStart] = useState(true);
   const [editing, setEditing] = useState<Landmark | "new" | null>(null);
   const yp = buildYearPlan(data, year, today, withStart);
@@ -19,6 +20,12 @@ export function YearPlanView({ today }: { today: Date }) {
 
   const save = (l: Landmark) => update((h) => ({ ...h, landmarks: (h.landmarks ?? []).some((x) => x.id === l.id) ? (h.landmarks ?? []).map((x) => (x.id === l.id ? l : x)) : [...(h.landmarks ?? []), l] }), `saved ${year} landmark ${l.name}`);
   const remove = (id: string) => update((h) => ({ ...h, landmarks: (h.landmarks ?? []).filter((x) => x.id !== id) }), "removed a landmark");
+  const targets: YearTargets = data.settings.yearTargets?.[String(year)] ?? {};
+  const setTarget = (patch: Partial<YearTargets>) => update((h) => ({ ...h, settings: { ...h.settings, yearTargets: { ...(h.settings.yearTargets ?? {}), [String(year)]: { ...(h.settings.yearTargets?.[String(year)] ?? {}), ...patch } } } }), `${year} targets`);
+  const setStrategy = (strategy: StrategyId) => update((h) => ({ ...h, settings: { ...h.settings, strategy } }), `strategy: ${strategy}`);
+  const setExtra = (extraPayment: number) => update((h) => ({ ...h, settings: { ...h.settings, extraPayment } }), `extra payment ${extraPayment}`);
+  const isThisYear = year === today.getFullYear();
+  const gap = (target: number | undefined, value: number, goodWhenHigher: boolean) => target === undefined ? undefined : (goodWhenHigher ? value >= target : value <= target) ? "green" : "red";
 
   return (
     <div className="flex flex-col gap-4">
@@ -34,14 +41,30 @@ export function YearPlanView({ today }: { today: Date }) {
           <Button onClick={() => setEditing("new")} className="h-10"><Plus size={14} className="inline -mt-0.5 mr-1" />Landmark</Button>
         </div>
       </div>
-      <div className="text-[13px] text-muted leading-snug">Today&apos;s income, bills, everyday spending and extra debt payment applied to every month of {year}, plus the landmarks you add. Expected income: {money(yp.months[0].income)}/mo · bills {money(yp.months[0].bills)}/mo · everyday {money(yp.months[0].everyday)}/mo.</div>
+      <div className="text-[13px] text-muted leading-snug">{isThisYear ? <>Months that already happened use what the bank recorded ({yp.toDate.months} so far: {money(yp.toDate.income)} in, {money(yp.toDate.spending)} out). The rest of {year} is the plan: </> : <>Every month of {year} uses the plan: </>}expected income {money(yp.months[11].income)}/mo · bills {money(yp.months[11].bills)}/mo · everyday {money(yp.months[11].everyday)}/mo, plus your landmarks.</div>
+
+      {/* Strategy + targets: how you want the year to go */}
+      <Card className="p-4 flex flex-col gap-3">
+        <div className="flex items-center gap-2"><Target size={15} className="text-accent" /><div className="text-sm font-semibold">How we want {year} to go</div></div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Debt strategy" hint={STRATEGIES.find((x) => x.id === data.settings.strategy)?.headline}><select className={selectCls} value={data.settings.strategy} onChange={(e) => setStrategy(e.target.value as StrategyId)}>{STRATEGIES.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+          <Field label="Extra toward debt each month ($)"><input className={inputCls} type="number" inputMode="decimal" value={data.settings.extraPayment || ""} onChange={(e) => setExtra(Number(e.target.value) || 0)} /></Field>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Field label="Target · in pocket, Dec"><input className={inputCls} type="number" inputMode="decimal" value={targets.pocket ?? ""} placeholder="e.g. 10000" onChange={(e) => setTarget({ pocket: e.target.value === "" ? undefined : Number(e.target.value) })} /></Field>
+          <Field label="Target · debt left, Dec"><input className={inputCls} type="number" inputMode="decimal" value={targets.debt ?? ""} placeholder="0 = debt-free" onChange={(e) => setTarget({ debt: e.target.value === "" ? undefined : Number(e.target.value) })} /></Field>
+          <Field label="Target · income, year"><input className={inputCls} type="number" inputMode="decimal" value={targets.income ?? ""} onChange={(e) => setTarget({ income: e.target.value === "" ? undefined : Number(e.target.value) })} /></Field>
+          <Field label="Target · spending cap, year"><input className={inputCls} type="number" inputMode="decimal" value={targets.spending ?? ""} onChange={(e) => setTarget({ spending: e.target.value === "" ? undefined : Number(e.target.value) })} /></Field>
+        </div>
+        <div className="text-[11px] text-muted">The strategy and extra payment drive the debt curve below; targets show green when the plan gets there and red when it doesn&apos;t.</div>
+      </Card>
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
-        <Kpi dark label={`In your pocket · end of ${year}`} value={money(t.pocketEnd)} sub={withStart ? `starts from ${money(yp.startBalance)} checking` : "from $0"} tone={t.pocketEnd < 0 ? "red" : undefined} />
-        <Kpi label="Income" value={money(t.income)} sub={`${money(t.income / 12)}/mo expected`} />
-        <Kpi label="Spending" value={money(t.spending)} sub={`bills ${money(t.bills)} · everyday ${money(t.everyday)}`} />
-        <Kpi label={`Debt remaining · Dec ${year}`} value={money(t.debtEnd)} sub={t.debtStart > 0 ? `${money(t.debtPaid)} paid down from ${money(t.debtStart)}` : "no debt tracked"} tone={t.debtEnd === 0 && t.debtStart > 0 ? "green" : undefined} />
+        <Kpi dark label={`In your pocket · end of ${year}`} value={money(t.pocketEnd)} sub={targets.pocket !== undefined ? `target ${money(targets.pocket)} · ${t.pocketEnd >= targets.pocket ? "on track" : `${money(targets.pocket - t.pocketEnd)} short`}` : withStart ? `starts from ${money(yp.startBalance)} checking` : "from $0"} tone={t.pocketEnd < 0 ? "red" : gap(targets.pocket, t.pocketEnd, true)} />
+        <Kpi label="Income" value={money(t.income)} sub={targets.income !== undefined ? `target ${money(targets.income)}` : isThisYear ? `${money(yp.toDate.income)} so far` : `${money(t.income / 12)}/mo expected`} tone={gap(targets.income, t.income, true)} />
+        <Kpi label="Spending" value={money(t.spending)} sub={targets.spending !== undefined ? `cap ${money(targets.spending)}` : `bills ${money(t.bills)} · everyday ${money(t.everyday)}`} tone={gap(targets.spending, t.spending, false)} />
+        <Kpi label={`Debt remaining · Dec ${year}`} value={money(t.debtEnd)} sub={targets.debt !== undefined ? `target ${money(targets.debt)}` : t.debtStart > 0 ? `${money(t.debtPaid)} paid down from ${money(t.debtStart)}` : "no debt tracked"} tone={t.debtEnd === 0 && t.debtStart > 0 ? "green" : gap(targets.debt, t.debtEnd, false)} />
         <Kpi label="Purposed" value={money(t.landmarks)} sub={`${t.landmarkCount} landmark${t.landmarkCount === 1 ? "" : "s"} you set`} tone="amber" />
       </div>
       <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={withStart} onChange={(e) => setWithStart(e.target.checked)} className="w-4 h-4 accent-[#0e6b74]" /> Start &quot;in your pocket&quot; from today&apos;s checking balance</label>
@@ -68,7 +91,7 @@ export function YearPlanView({ today }: { today: Date }) {
           <tbody>
             {yp.months.map((m) => (
               <tr key={m.key} className="border-b border-line-soft last:border-b-0 align-top">
-                <td className="px-3 py-2"><div className="font-semibold">{m.name} {year}</div>{m.landmarks.map((l) => <button key={l.id} onClick={() => setEditing(l)} className="block text-[11px] text-amber font-semibold hover:underline text-left">⚑ {l.name} · {l.amount < 0 ? "+" : ""}{money(Math.abs(l.amount))}{l.amount < 0 ? " in" : ""}</button>)}</td>
+                <td className="px-3 py-2"><div className="font-semibold">{m.name} {year} {m.source === "actual" && <span className="text-[9px] font-semibold text-accent bg-accent-bg rounded px-1 py-0.5 align-middle">actual</span>}{m.source === "blend" && <span className="text-[9px] font-semibold text-amber bg-amber-bg rounded px-1 py-0.5 align-middle">so far + plan</span>}</div>{m.landmarks.map((l) => <button key={l.id} onClick={() => setEditing(l)} className="block text-[11px] text-amber font-semibold hover:underline text-left">⚑ {l.name} · {l.amount < 0 ? "+" : ""}{money(Math.abs(l.amount))}{l.amount < 0 ? " in" : ""}</button>)}</td>
                 <td className="px-3 py-2 text-right text-green">{money(m.income)}</td>
                 <td className="px-3 py-2 text-right">{money(m.bills + m.everyday)}</td>
                 <td className="px-3 py-2 text-right">{m.debtExtra ? money(m.debtExtra) : "—"}</td>

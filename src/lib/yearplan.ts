@@ -1,6 +1,8 @@
 import type { HomeData, Landmark } from "./types";
 import { debtsFromAccounts, simulatePayoff } from "./strategies";
 import { expectedMonthlyIncome } from "./detect";
+import { actualsForMonth } from "./actuals";
+import { getDaysInMonth } from "date-fns";
 
 /**
  * Year plan: today's income, bills, everyday spending and extra debt payment, applied to every
@@ -13,18 +15,23 @@ export interface PlanMonth {
   landmarks: Landmark[]; landmarkTotal: number;
   net: number; cumulative: number; pocket: number;
   debtRemaining: number;
+  /** Where the numbers came from: the bank (past), bank-so-far + plan for the rest (this month), or the plan. */
+  source: "actual" | "blend" | "plan";
 }
 export interface YearPlan {
   year: number;
   months: PlanMonth[];
   startBalance: number;
   totals: { income: number; spending: number; bills: number; everyday: number; landmarks: number; debtPaid: number; net: number; pocketEnd: number; debtStart: number; debtEnd: number; landmarkCount: number };
+  /** Year to date (actual months + this month so far). */
+  toDate: { income: number; spending: number; months: number };
 }
 
 export function buildYearPlan(data: HomeData, year: number, today = new Date(), includeStartBalance = true): YearPlan {
-  const income = expectedMonthlyIncome(data);
-  const bills = data.bills.reduce((s, b) => s + b.amount, 0);
-  const everyday = data.settings.everydaySpend;
+  const plannedIncome = expectedMonthlyIncome(data);
+  const plannedBills = data.bills.reduce((s, b) => s + b.amount, 0);
+  const plannedEveryday = data.settings.everydaySpend;
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
   const extra = data.settings.extraPayment;
   const startBalance = includeStartBalance ? data.accounts.filter((a) => a.kind === "checking").reduce((s, a) => s + a.balance, 0) : 0;
   const landmarks = (data.landmarks ?? []).filter((l) => l.month.startsWith(String(year)));
@@ -38,23 +45,39 @@ export function buildYearPlan(data: HomeData, year: number, today = new Date(), 
   const minSum = debts.reduce((s, d) => s + d.min, 0);
 
   let cumulative = 0;
+  // Money that has already happened is already in today's checking balance, so "in your pocket" only rolls forward the part still ahead.
+  let cumFuture = 0;
   const months: PlanMonth[] = Array.from({ length: 12 }, (_, m) => {
     const key = `${year}-${String(m + 1).padStart(2, "0")}`;
     const lm = landmarks.filter((l) => l.month === key);
     const landmarkTotal = lm.reduce((s, l) => s + l.amount, 0);
     const remaining = debtAt(year, m);
-    const debtExtra = remaining > 0 ? extra : 0;
     // Bills already include minimum payments when they're set up as bills; avoid double counting by not adding minSum.
     void minSum;
+    // Past months: what the bank recorded. This month: recorded so far + the plan for the days left. Ahead: the plan.
+    const isPast = key < todayKey, isNow = key === todayKey;
+    const act = isPast || isNow ? actualsForMonth(data, key, isNow ? today.getDate() : undefined) : null;
+    const source: PlanMonth["source"] = isPast && act?.hasData ? "actual" : isNow && act?.hasData ? "blend" : "plan";
+    const dim = getDaysInMonth(new Date(year, m, 1));
+    const left = isNow ? (dim - today.getDate()) / dim : 0;
+    const income = source === "actual" ? act!.income : source === "blend" ? act!.income + plannedIncome * left : plannedIncome;
+    const bills = source === "actual" ? act!.bills : source === "blend" ? act!.bills + plannedBills * left : plannedBills;
+    const everyday = source === "actual" ? act!.spend : source === "blend" ? act!.spend + plannedEveryday * left : plannedEveryday;
+    const debtExtra = source === "actual" ? 0 : remaining > 0 ? extra : 0;
     const net = income - bills - everyday - debtExtra - landmarkTotal;
     cumulative += net;
-    return { key, name: new Date(year, m, 1).toLocaleString("en-US", { month: "short" }), index: m, income, bills, everyday, debtExtra, landmarks: lm, landmarkTotal, net, cumulative, pocket: startBalance + cumulative, debtRemaining: remaining };
+    const futureNet = source === "actual" ? 0 : source === "blend" ? (plannedIncome - plannedBills - plannedEveryday) * left - debtExtra - landmarkTotal : net;
+    cumFuture += futureNet;
+    const pocket = includeStartBalance ? startBalance + cumFuture : cumulative;
+    return { key, name: new Date(year, m, 1).toLocaleString("en-US", { month: "short" }), index: m, income, bills, everyday, debtExtra, landmarks: lm, landmarkTotal, net, cumulative, pocket, debtRemaining: remaining, source };
   });
   const sum = (f: (x: PlanMonth) => number) => months.reduce((s, x) => s + f(x), 0);
   const debtStart = debtAt(year, 0);
   const debtEnd = months[11].debtRemaining;
+  const done = months.filter((x) => x.source !== "plan");
   return {
     year, months, startBalance,
-    totals: { income: sum((x) => x.income), bills: sum((x) => x.bills), everyday: sum((x) => x.everyday), landmarks: sum((x) => x.landmarkTotal), debtPaid: Math.max(0, debtStart - debtEnd), spending: sum((x) => x.bills + x.everyday + x.debtExtra + x.landmarkTotal), net: cumulative, pocketEnd: startBalance + cumulative, debtStart, debtEnd, landmarkCount: landmarks.length },
+    toDate: { income: done.reduce((s, x) => s + x.income, 0), spending: done.reduce((s, x) => s + x.bills + x.everyday + x.landmarkTotal, 0), months: done.length },
+    totals: { income: sum((x) => x.income), bills: sum((x) => x.bills), everyday: sum((x) => x.everyday), landmarks: sum((x) => x.landmarkTotal), debtPaid: Math.max(0, debtStart - debtEnd), spending: sum((x) => x.bills + x.everyday + x.debtExtra + x.landmarkTotal), net: cumulative, pocketEnd: months[11].pocket, debtStart, debtEnd, landmarkCount: landmarks.length },
   };
 }

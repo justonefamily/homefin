@@ -63,7 +63,13 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const notABill = () => { update((h) => ({ ...h, bills: h.bills.filter((b) => b.id !== bill?.id), payments: h.payments.filter((p) => p.billId !== bill?.id), settings: { ...h.settings, dismissedSuggestions: [...new Set([...(h.settings.dismissedSuggestions ?? []), key])] } }), note("not a bill")); onClose(); };
   const suggestAgain = () => { update((h) => ({ ...h, settings: { ...h.settings, dismissedSuggestions: (h.settings.dismissedSuggestions ?? []).filter((k) => k !== key) } }), note("suggest again")); onClose(); };
   const setKind = (kind: "transfer" | "ignore" | "spend") => { update((h) => setMerchantPref(h, key, { kind }), note(kind)); onClose(); };
-  const save = () => { update((h) => setMerchantPref(h, key, { name: name.trim() && name.trim() !== rawNames[0] ? name.trim() : undefined, category }), note("updated")); onClose(); };
+  /** One name, everywhere: the merchant pref carries it, and any bill for this merchant takes the same name. Cleared → back to the bank's name. */
+  const save = () => { update((h) => {
+    const custom = name.trim() && name.trim() !== rawNames[0] ? name.trim() : undefined;
+    const next = setMerchantPref(h, key, { name: custom, category });
+    const shown = custom ?? rawNames[0] ?? bill?.name;
+    return { ...next, bills: next.bills.map((b) => (bill && b.id === bill.id && shown ? { ...b, name: shown, category } : b)) };
+  }, note("renamed")); onClose(); };
   const merge = () => { if (!mergeInto) return; update((h) => mergeMerchants(h, key, mergeInto), note("merged")); onClose(); };
   const candidates = all.filter((m) => m.key !== key && m.kind !== "ignore" && (!query || m.name.toLowerCase().includes(query.toLowerCase()) || m.key.includes(query.toLowerCase()))).slice(0, 8);
   const shown = showAll ? txs : txs.slice(0, 8);

@@ -2,6 +2,7 @@ import { addDays, endOfMonth, getDaysInMonth, startOfMonth } from "date-fns";
 import type { Bill, HomeData } from "./types";
 import { monthKey } from "./strategies";
 import { expectedMonthlyIncome, expectedPayDays } from "./detect";
+import { actualsByDay, actualsForMonth } from "./actuals";
 
 /* ------------------------------------------------------------------ */
 /* Pay periods: 1st–splitDay and (splitDay+1)–end of month             */
@@ -65,14 +66,17 @@ export function weeklyProjection(data: HomeData, today: Date): WeekRow[] {
   const paycheck = expectedMonthlyIncome(data) / Math.max(1, payDays.length);
   const everydayPerDay = data.settings.everydaySpend / dim;
   const statuses = billStatuses(data, today);
+  // Days that already happened use what the bank recorded (when there is any); days ahead use the plan.
+  const actual = actualsByDay(data, monthKey(today));
+  const useActual = actualsForMonth(data, monthKey(today)).hasData;
+  const dayIn = (d: number) => (useActual && d <= today.getDate() ? actual[d].income : payDays.includes(d) ? paycheck : 0);
+  const dayEveryday = (d: number) => (useActual && d <= today.getDate() ? actual[d].spend : everydayPerDay);
+  const dayBills = (d: number) => (useActual && d <= today.getDate() ? actual[d].bills : statuses.filter((s) => s.dueDate.getDate() === d).reduce((s, x) => s + x.bill.amount, 0));
+  const dayBillNames = (d: number) => (useActual && d <= today.getDate() ? actual[d].billNames : statuses.filter((s) => s.dueDate.getDate() === d).map((s) => s.bill.name));
 
   // Per-day net flow for the whole month.
   const flow: number[] = Array(dim + 1).fill(0);
-  for (let d = 1; d <= dim; d++) {
-    if (payDays.includes(d)) flow[d] += paycheck;
-    flow[d] -= everydayPerDay;
-  }
-  for (const s of statuses) flow[s.dueDate.getDate()] -= s.bill.amount;
+  for (let d = 1; d <= dim; d++) flow[d] = dayIn(d) - dayEveryday(d) - dayBills(d);
 
   // Balance at start of month = today's balance minus everything that already happened.
   let startOfMonthBal = checking;
@@ -89,9 +93,10 @@ export function weeklyProjection(data: HomeData, today: Date): WeekRow[] {
     let income = 0, bills = 0, everyday = 0;
     const billNames: string[] = [];
     for (let d = cursor.getDate(); d <= end.getDate(); d++) {
-      if (payDays.includes(d)) income += paycheck;
-      everyday += everydayPerDay;
-      for (const s of statuses) if (s.dueDate.getDate() === d) { bills += s.bill.amount; billNames.push(s.bill.name); }
+      income += dayIn(d);
+      everyday += dayEveryday(d);
+      bills += dayBills(d);
+      billNames.push(...dayBillNames(d));
     }
     bal = startBalance + income - bills - everyday;
     const state: WeekRow["state"] = today > end ? "past" : today < cursor ? "future" : "current";
@@ -115,12 +120,11 @@ export function yearProjection(data: HomeData, today: Date): MonthRow[] {
     const key = monthKey(d);
     const state: MonthRow["state"] = m < today.getMonth() ? "past" : m === today.getMonth() ? "current" : "future";
     // Past months: use recorded transactions + bills paid that month if any; otherwise fall back to the template.
-    const tx = data.transactions.filter((t) => t.date.startsWith(key)).reduce((s, t) => s + t.amount, 0);
-    const paidBills = data.payments.filter((p) => p.month === key).reduce((s, p) => s + p.amount, 0);
-    const bills = state === "future" ? monthlyBills : paidBills || monthlyBills;
-    const everyday = state === "past" && tx ? tx : data.settings.everydaySpend;
-    const monthlyIncome = expectedMonthlyIncome(data);
-    const net = monthlyIncome - bills - everyday - data.settings.extraPayment;
+    const act = actualsForMonth(data, key);
+    const bills = state === "past" && act.hasData ? act.bills : monthlyBills;
+    const everyday = state === "past" && act.hasData ? act.spend : data.settings.everydaySpend;
+    const monthlyIncome = state === "past" && act.hasData ? act.income : expectedMonthlyIncome(data);
+    const net = monthlyIncome - bills - everyday - (state === "past" ? 0 : data.settings.extraPayment);
     return { month: m, name: d.toLocaleString("en-US", { month: "short" }), key, income: monthlyIncome, bills, net, state };
   });
 }

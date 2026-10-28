@@ -116,6 +116,21 @@ export interface Settings {
   budgetsAppliedForQuarter?: string;
   /** Per-merchant decisions: merges, renames, transfer/ignore, category. */
   merchants?: Record<string, MerchantPref>;
+  /** Year-plan targets by year: what you want the year to end at. */
+  yearTargets?: Record<string, YearTargets>;
+}
+
+export interface YearTargets {
+  /** In your pocket at year end. */
+  pocket?: number;
+  /** Debt remaining at year end (0 = debt-free). */
+  debt?: number;
+  /** Total income for the year. */
+  income?: number;
+  /** Total spending (bills + everyday + landmarks) for the year. */
+  spending?: number;
+  /** Set aside / given for the year. */
+  saved?: number;
 }
 
 /** A balance reading for an account on a date — Plaid sync appends one each run. Powers debt/net-worth history. */
