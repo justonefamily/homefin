@@ -11,6 +11,7 @@ import { Button, Card, cx } from "./ui";
 import { importJson } from "@/lib/storage/local";
 import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
 import { dedupeIncome, matchInternalTransfers } from "@/lib/merchants";
+import { ItemSheetHost } from "./ItemSheet";
 
 const NAV = [
   { href: "/", label: "Home", icon: Home },
@@ -114,6 +115,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="flex-1 min-w-0">
         <div className="mx-auto w-full max-w-md md:max-w-6xl px-5 pt-6 pb-28 md:px-10 md:py-8 flex flex-col gap-4 md:gap-6">{children}</div>
       </main>
+      <ItemSheetHost />
 
       {/* Mobile bottom tabs */}
       <nav aria-label="Main" className="md:hidden fixed bottom-0 inset-x-0 bg-card border-t border-line grid grid-cols-8 px-0.5 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">

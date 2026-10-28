@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import { useItem } from "@/store/useItem";
+import { merchantKey } from "@/lib/detect";
 import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Field, Modal, cx, inputCls, money, selectCls } from "./ui";
@@ -68,6 +70,9 @@ const Tool = ({ children, label, onClick, danger }: { children: React.ReactNode;
 /* ------------------------------ renderers ------------------------------ */
 
 export function WidgetView({ w, data, today }: { w: Widget; data: HomeData; today: Date }) {
+  const openItem = useItem((s) => s.openItem);
+  /** List/bar points that are bills open the bill's item page. */
+  const billKeyFor = (id: string) => { const b = data.bills.find((x) => x.id === id); return b ? b.merchant ?? merchantKey(b.name) : null; };
   const title = w.title || defaultTitle(w, data);
   if (w.kind === "kpi") {
     const r = runScalar(data, today, w.source, w.param);
@@ -135,13 +140,13 @@ export function WidgetView({ w, data, today }: { w: Widget; data: HomeData; toda
   return (
     <Card className="h-full flex flex-col">
       <div className="px-4 pt-3 pb-1"><Eyebrow>{title}</Eyebrow></div>
-      {s.points.slice(0, 8).map((p) => (
-        <div key={p.id} className="flex items-center gap-2.5 px-4 py-2 border-t border-line-soft text-xs">
+      {s.points.slice(0, 8).map((p) => { const k = billKeyFor(p.id); return (
+        <div key={p.id} role={k ? "button" : undefined} tabIndex={k ? 0 : undefined} onClick={() => k && openItem(k)} onKeyDown={(e) => k && e.key === "Enter" && openItem(k)} className={cx("flex items-center gap-2.5 px-4 py-2 border-t border-line-soft text-xs", k && "cursor-pointer hover:bg-surface/60")}>
           <i className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color ?? "#0e6b74" }} />
           <div className="flex-1 min-w-0"><div className="font-semibold truncate">{p.label}</div>{p.sub && <div className="text-[11px] text-muted truncate">{p.sub}</div>}</div>
           <div className="font-semibold">{fmtVal(p.value, s.format)}</div>
         </div>
-      ))}
+      ); })}
     </Card>
   );
 }

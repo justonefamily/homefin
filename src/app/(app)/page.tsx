@@ -6,6 +6,7 @@ import { Segmented } from "@/components/ui";
 import Link from "next/link";
 import { getDaysInMonth } from "date-fns";
 import { useHome } from "@/store/useHome";
+import { useItem } from "@/store/useItem";
 import { useToday } from "@/components/hooks";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { Card, Mark, Row, SectionTitle, cx, fmt, money } from "@/components/ui";
@@ -18,6 +19,7 @@ import { uid } from "@/lib/storage/adapter";
 export default function HomePage() {
   const { data: d, update } = useHome();
   const data = d!;
+  const openItem = useItem((s) => s.openItem);
   const today = useToday();
   const params = useSearchParams();
   const [tab, setTab] = useState<"today" | "focus">(params.get("view") === "focus" ? "focus" : "today");
@@ -113,7 +115,7 @@ export default function HomePage() {
           <Card>
             {upcoming.length === 0 && <div className="p-4 text-sm text-muted">No bills in this period.</div>}
             {upcoming.map((s) => (
-              <Row key={s.bill.id} left={<Mark>{s.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Mark>} title={s.bill.name}
+              <Row key={s.bill.id} onClick={() => openItem(s.bill.merchant ?? merchantKey(s.bill.name))} left={<Mark>{s.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Mark>} title={s.bill.name}
                 sub={data.accounts.find((a) => a.id === s.bill.accountId)?.institution ?? data.budgets.find((b) => b.id === s.bill.category)?.name ?? ""}
                 right={money(s.bill.amount)} rightSub={s.paid ? "Paid" : s.overdue ? "Overdue" : "Due"} rightTone={s.paid ? "text-green" : s.overdue ? "text-red" : "text-amber"} />
             ))}

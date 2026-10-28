@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { EyeOff, Merge, Receipt, Search, Shuffle, Undo2, Ban, Check } from "lucide-react";
 import { useHome } from "@/store/useHome";
+import { useItem } from "@/store/useItem";
 import { Button, Field, Modal, cx, inputCls, money, selectCls } from "./ui";
 import { billKeyMap, merchantSummaries, merchantToBill, mergeMerchants, prefFor, resolveKey, setMerchantPref, txKey } from "@/lib/merchants";
 import { autoMarkPaid, detectRecurring, merchantKey, suggestionToBill } from "@/lib/detect";
@@ -50,7 +51,15 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const status = pref.kind === "ignore" ? "Hidden" : pref.kind === "transfer" || (txs[0]?.transfer && pref.kind !== "spend") ? "Transfer between your accounts" : bill ? `Bill · ${bill.name}` : dismissed ? "Not a bill (you said)" : suggestion ? "Looks like a bill — not confirmed" : "Everyday spending";
 
   const note = (s: string) => `${displayName}: ${s}`;
-  const makeBill = () => { update((h) => { const b: Bill = suggestion ? { ...suggestionToBill(suggestion, uid()), category } : me ? merchantToBill(me, uid(), category) : null!; if (!b) return h; const next = { ...h, bills: [...h.bills, b], settings: { ...h.settings, dismissedSuggestions: (h.settings.dismissedSuggestions ?? []).filter((k) => k !== key) } }; return { ...next, payments: [...next.payments, ...autoMarkPaid(next)] }; }, note("it's a bill")); onClose(); };
+  const makeBill = () => { update((h) => {
+    const b: Bill | null = suggestion ? { ...suggestionToBill(suggestion, uid()), category } : me ? merchantToBill(me, uid(), category) : null;
+    if (!b) return h;
+    b.name = name.trim() || b.name; // the name you gave it is the bill's name
+    // A payment you call a bill is money out — even if the bank filed it as a transfer (a car note to a loan at the same bank, say).
+    let next = setMerchantPref(h, key, { kind: "spend", name: name.trim() && name.trim() !== rawNames[0] ? name.trim() : pref.name, category });
+    next = { ...next, bills: [...next.bills, b], settings: { ...next.settings, dismissedSuggestions: (next.settings.dismissedSuggestions ?? []).filter((k) => k !== key) } };
+    return { ...next, payments: [...next.payments, ...autoMarkPaid(next)] };
+  }, note("it's a bill")); onClose(); };
   const notABill = () => { update((h) => ({ ...h, bills: h.bills.filter((b) => b.id !== bill?.id), payments: h.payments.filter((p) => p.billId !== bill?.id), settings: { ...h.settings, dismissedSuggestions: [...new Set([...(h.settings.dismissedSuggestions ?? []), key])] } }), note("not a bill")); onClose(); };
   const suggestAgain = () => { update((h) => ({ ...h, settings: { ...h.settings, dismissedSuggestions: (h.settings.dismissedSuggestions ?? []).filter((k) => k !== key) } }), note("suggest again")); onClose(); };
   const setKind = (kind: "transfer" | "ignore" | "spend") => { update((h) => setMerchantPref(h, key, { kind }), note(kind)); onClose(); };
@@ -106,11 +115,11 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
 
       {/* What you've decided */}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Show as"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Call it" hint="Your name for it — used everywhere, and for anything else from this merchant."><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Car note" /></Field>
         <Field label="Category"><select className={selectCls} value={category} onChange={(e) => setCategory(e.target.value)}>{data.budgets.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}<option value="other">Other</option></select></Field>
       </div>
       <div className="flex gap-2 flex-wrap">
-        {!bill && pref.kind !== "transfer" && <Button onClick={makeBill} className="h-10 px-3 text-xs"><Receipt size={13} className="inline -mt-0.5 mr-1" />{suggestion ? "Yes, it's a bill" : "Make this a bill"}{me ? ` · ${money(suggestion?.amount ?? me.medianAmount)}` : ""}</Button>}
+        {!bill && <Button onClick={makeBill} className="h-10 px-3 text-xs"><Receipt size={13} className="inline -mt-0.5 mr-1" />{suggestion ? "Yes, it's a bill" : "Make this a bill"}{me ? ` · ${money(suggestion?.amount ?? me.medianAmount)}` : ""}</Button>}
         {(bill || suggestion) && !dismissed && <Button variant="secondary" onClick={notABill} className="h-10 px-3 text-xs"><Ban size={13} className="inline -mt-0.5 mr-1" />Not a bill</Button>}
         {dismissed && <Button variant="secondary" onClick={suggestAgain} className="h-10 px-3 text-xs"><Check size={13} className="inline -mt-0.5 mr-1" />Suggest as a bill again</Button>}
         {pref.kind !== "transfer" && <Button variant="secondary" onClick={() => setKind("transfer")} className="h-10 px-3 text-xs"><Shuffle size={13} className="inline -mt-0.5 mr-1" />It&apos;s a transfer</Button>}
@@ -174,4 +183,12 @@ export function DepositSheet({ event, onClose }: { event: IncomeEvent; onClose: 
       <div className="text-[11px] text-muted">To attach this payer to a paycheck or expected income, use the suggestions on Bills → Income.</div>
     </Modal>
   );
+}
+
+/** Mount once (AppShell): renders whichever item page is open app-wide. */
+export function ItemSheetHost() {
+  const { merchant, deposit, close } = useItem();
+  if (merchant) return <ItemSheet merchantKey={merchant} onClose={close} />;
+  if (deposit) return <DepositSheet event={deposit} onClose={close} />;
+  return null;
 }
