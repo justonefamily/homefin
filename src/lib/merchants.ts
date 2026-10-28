@@ -1,5 +1,6 @@
 import type { Bill, HomeData, MerchantPref, Transaction } from "./types";
-import { merchantKey, p2pLabel } from "./detect";
+import { legacyMerchantKey, merchantKey, p2pLabel } from "./detect";
+import { parseNature } from "./nature";
 
 /**
  * Where the money goes, by merchant, across every account — and the complete in/out picture
@@ -17,7 +18,7 @@ export function resolveKey(data: HomeData, key: string): string {
   return k;
 }
 
-export const txKey = (data: HomeData, t: Transaction) => resolveKey(data, merchantKey(t.description));
+export const txKey = (data: HomeData, t: Transaction) => resolveKey(data, t.merchantOverride ?? merchantKey(t.description));
 
 /** How a transaction counts: a bill payment, a transfer, ignored, or plain spending. */
 export type TxKind = "bill" | "transfer" | "ignore" | "spend" | "reimbursable";
@@ -33,8 +34,42 @@ export function classify(data: HomeData, t: Transaction, billKeys: Map<string, B
   const bill = billKeys.get(key);
   if (bill) return { kind: "bill", key, bill };
   if (t.transfer && pref.kind !== "spend") return { kind: "transfer", key };
+  // The parser's read of the description decides the default: a move between your own accounts isn't spending.
+  if (!pref.kind && parseNature(t.description).defaultKind === "transfer") return { kind: "transfer", key };
   if (isReimbursable(data, pref.category ?? t.category)) return { kind: "reimbursable", key };
   return { kind: "spend", key };
+}
+
+/** Move one transaction to another merchant (or, with `tx:<id>`, make it stand on its own). Pass undefined to put it back. */
+export const moveTransaction = (data: HomeData, txId: string, toKey: string | undefined): HomeData =>
+  ({ ...data, transactions: data.transactions.map((t) => (t.id === txId ? { ...t, merchantOverride: toKey } : t)) });
+
+/**
+ * When the key rules improve, decisions made under the old keys (names, categories, merges, transfer flags) would be
+ * stranded. Carry each one over to the key its transactions have now. Returns null when nothing moved.
+ */
+export function migrateMerchantKeys(data: HomeData): HomeData | null {
+  const prefs = data.settings.merchants ?? {};
+  const have = new Set(data.transactions.map((t) => merchantKey(t.description)));
+  const next: Record<string, MerchantPref> = { ...prefs };
+  let moved = 0;
+  for (const [key, pref] of Object.entries(prefs)) {
+    if (have.has(key) || key.startsWith("tx:")) continue;
+    const targets = new Set(data.transactions.filter((t) => legacyMerchantKey(t.description) === key).map((t) => merchantKey(t.description)));
+    if (targets.size !== 1) continue;
+    const to = [...targets][0];
+    next[to] = { ...pref, ...(next[to] ?? {}) };
+    delete next[key];
+    for (const [k, p] of Object.entries(next)) if (p.mergedInto === key) next[k] = { ...p, mergedInto: to };
+    moved++;
+  }
+  if (!moved) return null;
+  const bills = data.bills.map((b) => {
+    if (!b.merchant || have.has(b.merchant)) return b;
+    const targets = new Set(data.transactions.filter((t) => legacyMerchantKey(t.description) === b.merchant).map((t) => merchantKey(t.description)));
+    return targets.size === 1 ? { ...b, merchant: [...targets][0] } : b;
+  });
+  return { ...data, bills, settings: { ...data.settings, merchants: next } };
 }
 
 export const billKeyMap = (data: HomeData) => {

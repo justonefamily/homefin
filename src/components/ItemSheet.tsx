@@ -5,7 +5,9 @@ import { findFlag, toggleFlag } from "@/lib/flags";
 import { useHome } from "@/store/useHome";
 import { useItem } from "@/store/useItem";
 import { Button, Field, Modal, byName, cx, inputCls, money, selectCls } from "./ui";
-import { billKeyMap, merchantSummaries, merchantToBill, mergeMerchants, prefFor, resolveKey, setMerchantPref, txKey, unmergeMerchant } from "@/lib/merchants";
+import { billKeyMap, merchantSummaries, merchantToBill, mergeMerchants, moveTransaction, prefFor, resolveKey, setMerchantPref, txKey, unmergeMerchant } from "@/lib/merchants";
+import { NATURE_LABEL, parseNature } from "@/lib/nature";
+import { MoreHorizontal } from "lucide-react";
 import { autoMarkPaid, detectRecurring, merchantKey, p2pLabel, suggestionToBill } from "@/lib/detect";
 import { brandColorFor } from "@/lib/brands";
 import { uid } from "@/lib/storage/adapter";
@@ -49,6 +51,9 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const [mergeInto, setMergeInto] = useState("");
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [moving, setMoving] = useState<string | null>(null); // transaction id being moved
+  const [moveQuery, setMoveQuery] = useState("");
+  const nature = rawNames[0] ? parseNature(rawNames[0]) : null;
   const catName = (id: string) => data.budgets.find((b) => b.id === id)?.name ?? "Other";
   const status = pref.kind === "ignore" ? "Hidden" : pref.kind === "transfer" || (txs[0]?.transfer && pref.kind !== "spend") ? "Transfer between your accounts" : bill ? `Bill · ${bill.name}` : me?.kind === "reimbursable" ? "Reimbursable — money comes back" : dismissed ? "Not a bill (you said)" : suggestion ? "Looks like a bill — not confirmed" : "Everyday spending";
 
@@ -82,7 +87,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
       {/* What the bank says */}
       {mergedAway && <div className="rounded-[12px] border border-amber-line bg-amber-bg px-3 py-2 text-[12px] flex items-center gap-2"><span className="flex-1">This is merged into <b>{displayName}</b>.</span><button onClick={() => update((h) => unmergeMerchant(h, mergedAway), `unmerged ${mergedAway}`)} className="h-7 px-2.5 rounded-[8px] bg-amber text-white text-[11px] font-semibold">Unmerge</button></div>}
       {rawNames.length > 0 && <div className="text-[12px] text-muted -mt-2 leading-snug">On your statement as <span className="text-ink font-medium">{rawNames.slice(0, 3).join(" · ")}</span>{rawNames.length > 3 ? ` and ${rawNames.length - 3} more` : ""}</div>}
-      <div className={cx("rounded-[12px] px-3 py-2 text-[12px] font-semibold", bill ? "bg-accent-bg text-accent" : dismissed ? "bg-surface text-muted" : suggestion ? "bg-amber-bg text-amber" : "bg-surface text-ink")}>{status}</div>
+      <div className={cx("rounded-[12px] px-3 py-2 text-[12px] font-semibold", bill ? "bg-accent-bg text-accent" : dismissed ? "bg-surface text-muted" : suggestion ? "bg-amber-bg text-amber" : "bg-surface text-ink")}>{status}{nature && nature.nature !== "other" && nature.nature !== "card" && <span className="font-normal text-muted"> · reads as {nature.label.toLowerCase()}</span>}</div>
       {me && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-3">
           <Fact label="Total">{money(me.total)}</Fact>
@@ -124,11 +129,28 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
         <div className="max-h-56 overflow-y-auto">
           {txs.length === 0 && <div className="px-3 py-3 text-[12px] text-muted">No bank transactions matched to this yet{bill ? " — it was added by hand, or the bank hasn't shown a payment under this name" : ""}.</div>}
           {shown.map((t) => { const a = data.accounts.find((x) => x.id === t.accountId); return (
-            <div key={t.id} className={cx("flex items-center gap-2 px-3 py-2 border-b border-line-soft last:border-b-0 text-[12px]", findFlag(data, "transaction", t.id) && "bg-amber-bg/60")}>
+            <div key={t.id}>
+            <div className={cx("flex items-center gap-2 px-3 py-2 border-b border-line-soft text-[12px]", findFlag(data, "transaction", t.id) && "bg-amber-bg/60", t.merchantOverride && "border-l-2 border-l-accent")}>
               <div className="w-20 shrink-0 text-muted">{day(t.date).replace(/, \d{4}$/, "")}</div>
               <div className="flex-1 min-w-0 truncate">{t.description}{a && <span className="text-muted"> · {a.name}</span>}</div>
               <div className="font-semibold">{money(t.amount)}</div>
               <FlagButton kind="transaction" refId={t.id} label={`${displayName} · ${money(t.amount)} · ${day(t.date)}`} compact />
+              <button onClick={() => { setMoving(moving === t.id ? null : t.id); setMoveQuery(""); }} aria-label="Move this transaction" aria-expanded={moving === t.id} className={cx("w-7 h-7 rounded-full flex items-center justify-center shrink-0", moving === t.id ? "bg-ink text-white" : "text-muted-3 hover:bg-surface hover:text-ink")}><MoreHorizontal size={14} /></button>
+            </div>
+            {moving === t.id && (
+              <div className="px-3 py-2 bg-surface border-b border-line-soft flex flex-col gap-2 text-[12px]">
+                <div className="text-muted">Move just this one {t.merchantOverride ? <>(currently moved here by hand · <button onClick={() => { update((h) => moveTransaction(h, t.id, undefined), "put a transaction back"); setMoving(null); }} className="text-accent font-semibold">put it back</button>)</> : ""}</div>
+                <div className="flex gap-2 flex-wrap">
+                  <Button onClick={() => { update((h) => { const own = `tx:${t.id}`; const n = parseNature(t.description); return setMerchantPref(moveTransaction(h, t.id, own), own, { name: p2pLabel(t.description) ?? (n.nature !== "other" ? n.label : undefined) }); }, "split a transaction out on its own"); setMoving(null); }} className="h-8 px-3 text-xs">Make it its own item</Button>
+                </div>
+                <div className="relative"><Search size={13} className="absolute left-2.5 top-2.5 text-muted" /><input autoFocus className={cx(inputCls, "h-8 pl-8 text-[12px]")} placeholder="…or move it to another merchant" value={moveQuery} onChange={(e) => setMoveQuery(e.target.value)} /></div>
+                {moveQuery && <div className="flex flex-col gap-1 max-h-36 overflow-y-auto">
+                  {all.filter((m) => m.key !== key && m.kind !== "ignore" && (m.name.toLowerCase().includes(moveQuery.toLowerCase()) || m.key.includes(moveQuery.toLowerCase()))).slice(0, 8).map((m) => (
+                    <button key={m.key} onClick={() => { update((h) => moveTransaction(h, t.id, m.key), `moved a transaction to ${m.name}`); setMoving(null); }} className="text-left px-3 py-1.5 rounded-[8px] border border-line bg-card hover:border-field"><b>{m.name}</b> <span className="text-muted">· {m.count}×</span></button>
+                  ))}
+                </div>}
+              </div>
+            )}
             </div>); })}
           {txs.length > 8 && <button onClick={() => setShowAll(!showAll)} className="w-full text-left px-3 py-2 text-[12px] font-semibold text-accent">{showAll ? "Show fewer" : `Show all ${txs.length}`}</button>}
         </div>

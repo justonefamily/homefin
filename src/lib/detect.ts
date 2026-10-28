@@ -1,5 +1,6 @@
 import type { Bill, BillPayment, HomeData, IncomeEvent, IncomeSource, Transaction } from "./types";
 import { resolveKey } from "./merchants";
+import { parseNature, stripBoilerplate } from "./nature";
 
 /**
  * Learn from what the bank already shows.
@@ -51,8 +52,17 @@ export const p2pLabel = (desc: string) => { const p = p2pParty(desc); if (!p) re
 export const merchantKey = (s: string) => {
   const p2p = p2pParty(s);
   if (p2p) return `${p2p.platform} to ${p2p.who}`;
-  return genericKey(s);
+  const n = parseNature(s);
+  if (n.nature === "wire" && n.party) return `wire to ${n.party}`;
+  if (n.nature === "ach" && n.party) return `ach to ${n.party}`;
+  if (n.nature === "transfer") return n.party ? `transfer to ${n.party}` : "transfer between accounts";
+  if (n.nature === "interest") return "interest charge";
+  if (n.nature === "atm") return "atm cash";
+  return genericKey(stripBoilerplate(s));
 };
+
+/** The key the app used before the parser existed — kept so old decisions can be carried over. */
+export const legacyMerchantKey = (s: string) => { const p2p = p2pParty(s); return p2p ? `${p2p.platform} to ${p2p.who}` : genericKey(s); };
 
 const genericKey = (s: string) =>
   s.toLowerCase()

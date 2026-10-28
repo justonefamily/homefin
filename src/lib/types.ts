@@ -72,6 +72,8 @@ export interface Transaction {
   transfer?: boolean;
   /** Plaid's detailed personal-finance category, kept so we can re-classify later. */
   pfc?: string;
+  /** This one transaction belongs to a different merchant than its description says (set from the item page). */
+  merchantOverride?: string;
 }
 
 /** How the household wants a merchant treated. Keyed by merchant key (see detect.ts merchantKey). */

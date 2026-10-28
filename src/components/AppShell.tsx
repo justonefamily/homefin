@@ -10,7 +10,7 @@ import { LocalAdapter } from "@/lib/storage/local";
 import { Button, Card, cx } from "./ui";
 import { importJson } from "@/lib/storage/local";
 import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
-import { dedupeIncome, matchInternalTransfers } from "@/lib/merchants";
+import { dedupeIncome, matchInternalTransfers, migrateMerchantKeys } from "@/lib/merchants";
 import { ItemSheetHost } from "./ItemSheet";
 
 const NAV = [
@@ -40,9 +40,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Pair deposits with matching outflows across accounts (internal transfers) for data synced before this existed.
   useEffect(() => {
     if (!data) return;
-    const deduped = dedupeIncome(data);
+    const migrated = migrateMerchantKeys(data);
+    const deduped = dedupeIncome(migrated ?? data) ?? migrated;
     const next = matchInternalTransfers(deduped ?? data) ?? deduped;
-    if (next) update(() => next, deduped ? "removed duplicate deposits" : "matched transfers between your accounts");
+    if (next) update(() => next, migrated ? "carried merchant decisions over to the new parser" : deduped ? "removed duplicate deposits" : "matched transfers between your accounts");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.transactions.length, data?.income?.length]);
   const [booted, setBooted] = useState(false);
