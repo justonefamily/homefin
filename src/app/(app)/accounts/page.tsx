@@ -21,7 +21,9 @@ const ago = (iso?: string) => {
   return m < 60 ? `synced ${m}m` : m < 1440 ? `synced ${Math.round(m / 60)}h` : `synced ${Math.round(m / 1440)}d`;
 };
 
-declare global { interface Window { Plaid?: { create: (cfg: { token: string; onSuccess: (publicToken: string, meta: { institution?: { name: string } }) => void }) => { open: () => void } } } }
+type PlaidExitError = { error_code?: string; error_message?: string; display_message?: string | null } | null;
+declare global { interface Window { Plaid?: { create: (cfg: { token: string; receivedRedirectUri?: string; onSuccess: (publicToken: string, meta: { institution?: { name: string } }) => void; onExit?: (err: PlaidExitError, meta: { institution?: { name: string } | null; status?: string }) => void }) => { open: () => void } } } }
+const LINK_TOKEN_KEY = "homefin.plaid.link_token";
 
 export default function AccountsPage() {
   const { data: d, update, adapter, load } = useHome();
@@ -74,23 +76,48 @@ export default function AccountsPage() {
     setSyncing(false);
   }, [load]);
 
+  /** Open Plaid Link. With `receivedRedirectUri`, this resumes an OAuth bank (Bank of America, Chase…) after it sent the user back to us. */
+  const openLink = useCallback((token: string, receivedRedirectUri?: string) => {
+    if (!window.Plaid) throw new Error("Plaid Link is still loading — try again in a second.");
+    window.Plaid.create({
+      token, receivedRedirectUri,
+      onSuccess: async (publicToken, meta) => {
+        try { sessionStorage.removeItem(LINK_TOKEN_KEY); } catch { /* ignore */ }
+        const ex = await fetch("/api/plaid/exchange", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ public_token: publicToken, institution: meta.institution?.name }) });
+        if (!ex.ok) { setMsg((await ex.json()).error ?? "exchange failed"); return; }
+        await sync(); await loadLinks();
+      },
+      onExit: (err, meta) => {
+        try { sessionStorage.removeItem(LINK_TOKEN_KEY); } catch { /* ignore */ }
+        if (err) {
+          const bank = meta?.institution?.name ? ` (${meta.institution.name})` : "";
+          setMsg(`Plaid stopped${bank}: ${err.display_message ?? err.error_message ?? err.error_code ?? "unknown error"}${err.error_code ? ` [${err.error_code}]` : ""}`);
+          console.warn("plaid link exit", err, meta);
+        }
+      },
+    }).open();
+  }, [sync]);
+
   const connect = useCallback(async () => {
     setMsg(null);
     try {
       const r = await fetch("/api/plaid/create-link-token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days: historyDays }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Could not start Plaid");
-      if (!window.Plaid) throw new Error("Plaid Link is still loading — try again in a second.");
-      window.Plaid.create({
-        token: j.link_token,
-        onSuccess: async (publicToken, meta) => {
-          const ex = await fetch("/api/plaid/exchange", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ public_token: publicToken, institution: meta.institution?.name }) });
-          if (!ex.ok) { setMsg((await ex.json()).error ?? "exchange failed"); return; }
-          await sync(); await loadLinks();
-        },
-      }).open();
+      try { sessionStorage.setItem(LINK_TOKEN_KEY, j.link_token); } catch { /* ignore */ }
+      openLink(j.link_token);
     } catch (e) { setMsg((e as Error).message); }
-  }, [sync, historyDays]);
+  }, [openLink, historyDays]);
+
+  // Coming back from an OAuth bank: Plaid appends ?oauth_state_id=… to our redirect URI. Resume Link with the same token.
+  useEffect(() => {
+    if (typeof window === "undefined" || !new URLSearchParams(location.search).has("oauth_state_id")) return;
+    let token: string | null = null;
+    try { token = sessionStorage.getItem(LINK_TOKEN_KEY); } catch { /* ignore */ }
+    if (!token) { queueMicrotask(() => setMsg("The bank sent you back, but the link session was lost — tap Connect and try again.")); return; }
+    const t = setInterval(() => { if (window.Plaid) { clearInterval(t); try { openLink(token!, location.href); } catch (e) { setMsg((e as Error).message); } } }, 200);
+    return () => clearInterval(t);
+  }, [openLink]);
 
   useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), 15000); return () => clearTimeout(t); } }, [msg]);
 

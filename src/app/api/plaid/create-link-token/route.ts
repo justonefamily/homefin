@@ -19,6 +19,9 @@ export async function POST(req: Request) {
       language: "en",
       transactions: { days_requested: days },
       webhook: process.env.PLAID_WEBHOOK_URL,
+      // OAuth banks (Bank of America, Chase, Capital One, Wells Fargo…) send the user to the bank's site and back here.
+      // The same URI must be on the allow-list in the Plaid dashboard (Developers → API → Allowed redirect URIs).
+      redirect_uri: process.env.PLAID_REDIRECT_URI || undefined,
     });
     return NextResponse.json({ link_token: r.data.link_token });
   } catch (e) {
