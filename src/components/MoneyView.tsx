@@ -205,12 +205,13 @@ function MerchantsView({ today }: { today: Date }) {
 function EverydayView({ today }: { today: Date }) {
   const { data: d, update } = useHome();
   const data = d!;
-  const [span, setSpan] = useState<"3m" | "6m" | "12m">("3m");
-  const monthsBack = span === "3m" ? 3 : span === "6m" ? 6 : 12;
-  // Previous N full months plus this month so far; the average counts this month as the fraction that has passed.
+  const [span, setSpan] = useState<"1m" | "3m" | "6m" | "12m">("1m");
+  const monthsBack = span === "1m" ? 0 : span === "3m" ? 3 : span === "6m" ? 6 : 12;
+  // "This month" is just this month so far (no averaging). Longer spans: previous N full months plus this month so far,
+  // with this month counted as the fraction that has passed.
   const end = ymd(today);
   const from = ymd(addMonths(startOfMonth(today), -monthsBack));
-  const span_ = monthsBack + today.getDate() / getDaysInMonth(today);
+  const span_ = monthsBack === 0 ? 1 : monthsBack + today.getDate() / getDaysInMonth(today);
   const all = useMemo(() => merchantSummaries(data, from, end), [data, from, end]);
   const spend = all.filter((m) => m.kind === "spend");
   const total = spend.reduce((s, m) => s + m.total, 0);
@@ -232,14 +233,14 @@ function EverydayView({ today }: { today: Date }) {
     <>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="text-[13px] text-muted leading-snug max-w-xl">Everything that isn&apos;t a bill or a transfer — groceries, gas, dining, shopping, the one-offs. This is what the plan calls <b>everyday spending</b>. Tap a merchant to re-categorize it, make it a bill, or call it a transfer.</div>
-        <div className="w-56"><Segmented size="sm" value={span} onChange={setSpan} options={[{ id: "3m", label: "3 mo" }, { id: "6m", label: "6 mo" }, { id: "12m", label: "12 mo" }]} /></div>
+        <div className="w-full sm:w-80"><Segmented size="sm" value={span} onChange={setSpan} options={[{ id: "1m", label: "This month" }, { id: "3m", label: "3 mo" }, { id: "6m", label: "6 mo" }, { id: "12m", label: "12 mo" }]} /></div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-        <Card className="p-3"><div className="text-[11px] text-muted">Actual, per month</div><div className="text-[17px] font-bold">{money(perMonth)}</div><div className="text-[11px] text-muted">last {monthsBack} months + this month so far</div></Card>
-        <Card className="p-3"><div className="text-[11px] text-muted">In the plan</div><div className="text-[17px] font-bold">{money(estimate)}</div><div className={cx("text-[11px] font-semibold", estimate < perMonth ? "text-red" : "text-green")}>{estimate < perMonth ? `${money(perMonth - estimate)}/mo under-planned` : estimate > perMonth ? `${money(estimate - perMonth)}/mo cushion` : "matches"}</div></Card>
+        <Card className="p-3"><div className="text-[11px] text-muted">{monthsBack === 0 ? "Spent so far this month" : "Actual, per month"}</div><div className="text-[17px] font-bold">{money(perMonth)}</div><div className="text-[11px] text-muted">{monthsBack === 0 ? `${today.toLocaleString("en-US", { month: "long" })} 1 – ${today.getDate()}` : `last ${monthsBack} months + this month so far`}</div></Card>
+        <Card className="p-3"><div className="text-[11px] text-muted">In the plan</div><div className="text-[17px] font-bold">{money(estimate)}</div><div className={cx("text-[11px] font-semibold", estimate < perMonth ? "text-red" : "text-green")}>{monthsBack === 0 ? (estimate >= perMonth ? `${money(estimate - perMonth)} left this month` : `${money(perMonth - estimate)} over already`) : estimate < perMonth ? `${money(perMonth - estimate)}/mo under-planned` : estimate > perMonth ? `${money(estimate - perMonth)}/mo cushion` : "matches"}</div></Card>
         <Card className="p-3"><div className="text-[11px] text-muted">Places</div><div className="text-[17px] font-bold">{spend.length}</div><div className="text-[11px] text-muted">{groups.length} categor{groups.length === 1 ? "y" : "ies"}</div></Card>
-        <Card className="p-3 flex flex-col justify-between"><div className="text-[11px] text-muted">Make the plan match</div><Button onClick={setEstimate} disabled={perMonth === estimate || perMonth === 0} className="h-9 text-xs mt-1">Set everyday to {money(perMonth)}/mo</Button></Card>
+        <Card className="p-3 flex flex-col justify-between"><div className="text-[11px] text-muted">Make the plan match</div><Button onClick={setEstimate} disabled={perMonth === estimate || perMonth === 0 || monthsBack === 0} className="h-9 text-xs mt-1">{monthsBack === 0 ? "Pick 3+ months to set" : `Set everyday to ${money(perMonth)}/mo`}</Button></Card>
       </div>
 
       {groups.length === 0 && <Card className="p-4 text-sm text-muted">No everyday spending recorded in this window yet.</Card>}
@@ -247,7 +248,7 @@ function EverydayView({ today }: { today: Date }) {
         <Card key={g.id} className="overflow-hidden">
           <button onClick={() => setOpen(open === g.id ? null : g.id)} aria-expanded={open === g.id} className="w-full text-left px-4 py-3 flex flex-col gap-1.5 hover:bg-surface/40">
             <div className="flex items-center gap-3">
-              <div className="flex-1 min-w-0"><div className="text-sm font-semibold">{g.name}{g.id === "other" && <span className="ml-2 text-[10px] font-semibold text-amber bg-amber/10 rounded px-1.5 py-0.5">needs sorting</span>}</div><div className="text-[11px] text-muted">{g.merchants.length} place{g.merchants.length === 1 ? "" : "s"} · {money(Math.round(g.total / span_))}/mo{g.budget ? ` · budget ${money(g.budget)}/mo` : ""}</div></div>
+              <div className="flex-1 min-w-0"><div className="text-sm font-semibold">{g.name}{g.id === "other" && <span className="ml-2 text-[10px] font-semibold text-amber bg-amber/10 rounded px-1.5 py-0.5">needs sorting</span>}</div><div className="text-[11px] text-muted">{g.merchants.length} place{g.merchants.length === 1 ? "" : "s"}{monthsBack === 0 ? "" : ` · ${money(Math.round(g.total / span_))}/mo`}{g.budget ? ` · budget ${money(g.budget)}/mo` : ""}</div></div>
               <div className="text-sm font-bold">{money(g.total)}</div>
               <ChevronRight size={15} className={cx("text-muted transition-transform", open === g.id && "rotate-90")} />
             </div>
@@ -257,7 +258,7 @@ function EverydayView({ today }: { today: Date }) {
             <div className="border-t border-line-soft">
               {g.merchants.map((m) => (
                 <button key={m.key} onClick={() => setPick(m.key)} className="w-full text-left flex items-center gap-3 px-4 py-2.5 border-b border-line-soft last:border-b-0 hover:bg-surface/60">
-                  <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold truncate">{m.name}{m.recurring && <span className="ml-2 text-[10px] font-semibold text-amber bg-amber/10 rounded px-1.5 py-0.5">recurring · bill?</span>}</div><div className="text-[11px] text-muted truncate">{m.count}× · {money(Math.round(m.total / span_))}/mo · {m.accountIds.map((id) => data.accounts.find((a) => a.id === id)?.name ?? "—").join(", ")}</div></div>
+                  <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold truncate">{m.name}{m.recurring && <span className="ml-2 text-[10px] font-semibold text-amber bg-amber/10 rounded px-1.5 py-0.5">recurring · bill?</span>}</div><div className="text-[11px] text-muted truncate">{m.count}×{monthsBack === 0 ? "" : ` · ${money(Math.round(m.total / span_))}/mo`} · {m.accountIds.map((id) => data.accounts.find((a) => a.id === id)?.name ?? "—").join(", ")}</div></div>
                   <div className="text-[13px] font-semibold">{money(m.total)}</div>
                 </button>
               ))}
