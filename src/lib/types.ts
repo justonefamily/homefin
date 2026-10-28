@@ -95,7 +95,10 @@ export interface PaySchedule {
   splitDay: number; // 15
   /** "halves" (default): 1st–splitDay and splitDay+1–end. "paydays": each period starts on a payday and runs to the day before the next one
    *  (paid the 15th and 30th → 15th–29th, then 30th–14th of next month). */
-  periodMode?: "halves" | "paydays";
+  periodMode?: "halves" | "paydays" | "custom";
+  /** Explicit pay periods ("custom"): each paycheck and the days it covers. `to` smaller than `from` means it runs into the next month
+   *  (paid the 30th, covers 30 → 14 = the 30th through the 14th of next month). */
+  periods?: { payDay: number; from: number; to: number }[];
 }
 
 export interface Settings {

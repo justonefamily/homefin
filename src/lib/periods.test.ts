@@ -52,3 +52,15 @@ describe("periods touching a month", () => {
     expect(periodsTouching(g, new Date(2026, 9, 28)).map((r) => r.label)).toEqual(["Oct 1 – 15", "Oct 16 – 31"]);
   });
 });
+
+describe("custom paycheck ranges", () => {
+  it("uses the exact days typed, wrapping into next month when 'through' is before 'from'", () => {
+    const h = emptyHome();
+    h.pay = { monthlyIncome: 1, payDays: [15, 30], splitDay: 15, periodMode: "custom", periods: [{ payDay: 15, from: 15, to: 29 }, { payDay: 30, from: 30, to: 14 }] };
+    expect(periodRangeFor(h, new Date(2026, 9, 1), "a").label).toBe("Oct 15 – 29");
+    expect(periodRangeFor(h, new Date(2026, 9, 1), "b").label).toBe("Oct 30 – Nov 14");
+    expect(currentPeriodRange(h, new Date(2026, 10, 3)).label).toBe("Oct 30 – Nov 14");
+    const one = emptyHome(); one.pay = { monthlyIncome: 1, payDays: [25], splitDay: 15, periodMode: "custom", periods: [{ payDay: 25, from: 25, to: 24 }] };
+    expect(periodRangeFor(one, new Date(2026, 9, 1), "a").label).toBe("Oct 25 – Nov 24");
+  });
+});

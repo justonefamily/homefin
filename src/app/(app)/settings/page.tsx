@@ -158,16 +158,38 @@ function PayModal({ onClose }: { onClose: () => void }) {
   const [income, setIncome] = useState(data.pay.monthlyIncome);
   const [days, setDays] = useState(data.pay.payDays.join(", "));
   const [split, setSplit] = useState(data.pay.splitDay);
-  const [mode, setMode] = useState<"halves" | "paydays">(data.pay.periodMode ?? "halves");
+  const [mode, setMode] = useState<"halves" | "paydays" | "custom">(data.pay.periodMode ?? "halves");
+  const [periods, setPeriods] = useState<{ payDay: number; from: number; to: number }[]>(data.pay.periods?.length ? data.pay.periods : (data.pay.payDays.length >= 2 ? [{ payDay: data.pay.payDays[0], from: data.pay.payDays[0], to: data.pay.payDays[1] - 1 }, { payDay: data.pay.payDays[1], from: data.pay.payDays[1], to: data.pay.payDays[0] - 1 || 31 }] : [{ payDay: data.pay.payDays[0] ?? 1, from: data.pay.payDays[0] ?? 1, to: 31 }]));
+  const setP = (i: number, patch: Partial<{ payDay: number; from: number; to: number }>) => setPeriods(periods.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const dayWord = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
   return (
     <Modal open onClose={onClose} title="Pay schedule">
       <Field label="Take-home income per month ($)"><input className={inputCls} type="number" inputMode="decimal" value={income || ""} onChange={(e) => setIncome(Number(e.target.value))} /></Field>
       <Field label="Paydays (days of month)" hint="Comma-separated. Twice a month = 1, 16. Monthly = 1."><input className={inputCls} value={days} onChange={(e) => setDays(e.target.value)} /></Field>
       <Field label="Pay periods" hint={mode === "paydays" ? "Each period starts on a payday and runs to the day before the next one. Paid the 15th & 30th: the Sep 30 check covers Sep 30 – Oct 14, the Oct 15 check covers Oct 15 – 29, and so on." : "Two halves: the 1st to the split day, then the split day + 1 to the end of the month."}>
-        <select className={selectCls} value={mode} onChange={(e) => setMode(e.target.value as "halves" | "paydays")}><option value="paydays">Start on my paydays</option><option value="halves">Halves of the month</option></select>
+        <select className={selectCls} value={mode} onChange={(e) => setMode(e.target.value as "halves" | "paydays" | "custom")}><option value="custom">Set each paycheck's dates</option><option value="paydays">Start on my paydays</option><option value="halves">Halves of the month</option></select>
       </Field>
+      {mode === "custom" && (
+        <div className="flex flex-col gap-2">
+          {periods.map((p, i) => (
+            <div key={i} className="rounded-[12px] border border-line p-3 flex flex-col gap-2">
+              <div className="text-[12px] font-semibold">Paycheck {i + 1}</div>
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="Paid on day"><input className={inputCls} type="number" min={1} max={31} value={p.payDay} onChange={(e) => setP(i, { payDay: Number(e.target.value) })} /></Field>
+                <Field label="Covers from day"><input className={inputCls} type="number" min={1} max={31} value={p.from} onChange={(e) => setP(i, { from: Number(e.target.value) })} /></Field>
+                <Field label="Through day"><input className={inputCls} type="number" min={1} max={31} value={p.to} onChange={(e) => setP(i, { to: Number(e.target.value) })} /></Field>
+              </div>
+              <div className="text-[11px] text-muted">Covers the {dayWord(p.from)} through the {dayWord(p.to)}{p.to < p.from ? " of the next month" : p.to >= 31 ? " (end of month)" : ""}.</div>
+            </div>
+          ))}
+          <div className="flex gap-2">
+            {periods.length < 2 && <Button variant="secondary" onClick={() => setPeriods([...periods, { payDay: 16, from: 16, to: 31 }])} className="h-9 text-xs">+ Second paycheck</Button>}
+            {periods.length > 1 && <Button variant="secondary" onClick={() => setPeriods(periods.slice(0, 1))} className="h-9 text-xs">Just one paycheck</Button>}
+          </div>
+        </div>
+      )}
       {mode === "halves" && <Field label="Split day" hint="Bills on or before this day belong to the first half."><input className={inputCls} type="number" min={1} max={28} value={split} onChange={(e) => setSplit(Number(e.target.value))} /></Field>}
-      <Button onClick={() => { const payDays = days.split(/[,\s]+/).map(Number).filter((n) => n >= 1 && n <= 31); update((h) => ({ ...h, pay: { monthlyIncome: income, payDays: payDays.length ? payDays : [1], splitDay: Math.max(1, Math.min(28, split)), periodMode: mode } }), "updated pay schedule"); onClose(); }}>Save</Button>
+      <Button onClick={() => { const payDays = days.split(/[,\s]+/).map(Number).filter((n) => n >= 1 && n <= 31); update((h) => ({ ...h, pay: { monthlyIncome: income, payDays: mode === "custom" ? periods.map((p) => p.payDay) : payDays.length ? payDays : [1], splitDay: Math.max(1, Math.min(28, split)), periodMode: mode, periods: mode === "custom" ? periods : h.pay.periods } }), "updated pay schedule"); onClose(); }}>Save</Button>
     </Modal>
   );
 }

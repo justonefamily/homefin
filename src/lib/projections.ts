@@ -25,8 +25,22 @@ export const currentPeriod = (date: Date, splitDay: number): Period => (date.get
 
 export interface PeriodRange { period: Period; from: Date; to: Date; label: string; anchor: Date }
 
+/** The explicit period definitions in effect: from Settings ("custom"), or derived from paydays / halves. */
+export function periodDefs(data: HomeData): { payDay: number; from: number; to: number }[] {
+  if (data.pay.periodMode === "custom" && data.pay.periods?.length) {
+    return data.pay.periods.slice(0, 2).map((p) => ({ payDay: Math.max(1, Math.min(31, p.payDay)), from: Math.max(1, Math.min(31, p.from)), to: Math.max(1, Math.min(31, p.to)) })).sort((a, b) => a.from - b.from);
+  }
+  const [s1, s2] = periodStarts(data);
+  if (s2 <= s1) return [{ payDay: s1, from: s1, to: s1 === 1 ? 31 : s1 - 1 }];
+  return [{ payDay: s1, from: s1, to: s2 - 1 }, { payDay: s2, from: s2, to: s1 === 1 ? 31 : s1 - 1 }];
+}
+
 /** The two days of the month a period starts on: [1, split+1] for halves, or the paydays (first two) when periods follow paychecks. */
 export function periodStarts(data: HomeData): [number, number] {
+  if (data.pay.periodMode === "custom" && data.pay.periods?.length) {
+    const d = data.pay.periods.map((p) => p.from).sort((a, b) => a - b);
+    return d.length >= 2 ? [d[0], d[1]] : [d[0], d[0]];
+  }
   if (data.pay.periodMode === "paydays") {
     // The paydays typed in Settings win (they're the contract dates); detected deposit days are the fallback, since
     // deposits often post a day early and would shift every period.
@@ -43,16 +57,13 @@ const fmtRange = (from: Date, to: Date) => `${from.toLocaleString("en-US", { mon
 
 /** The period that starts in `anchor`'s month: "a" runs from the first start to the day before the second; "b" from the second start to the day before next month's first start. */
 export function periodRangeFor(data: HomeData, anchor: Date, period: Period): PeriodRange {
-  const [s1, s2] = periodStarts(data);
+  const defs = periodDefs(data);
+  const def = period === "a" || defs.length < 2 ? defs[0] : defs[1];
   const y = anchor.getFullYear(), m = anchor.getMonth();
-  if (period === "a") {
-    const from = clampDay(y, m, s1);
-    const to = s2 > s1 ? addDays(clampDay(y, m, s2), -1) : addDays(clampDay(y, m + 1, s1), -1);
-    return { period, from, to, label: fmtRange(from, to), anchor: new Date(y, m, 1) };
-  }
-  const from = clampDay(y, m, s2);
-  const to = s1 === 1 ? endOfMonth(from) : addDays(clampDay(y, m + 1, s1), -1);
-  return { period, from, to, label: fmtRange(from, to), anchor: new Date(y, m, 1) };
+  const from = clampDay(y, m, def.from);
+  // `to` before `from` → the period runs into next month; `to` = 31 means "end of month" whatever its length.
+  const to = def.to >= def.from ? (def.to >= 31 ? endOfMonth(from) : clampDay(y, m, def.to)) : clampDay(y, m + 1, def.to);
+  return { period: defs.length < 2 ? "a" : period, from, to, label: fmtRange(from, to), anchor: new Date(y, m, 1) };
 }
 
 /** The period `date` falls in — may be the "b" period that started last month. */
