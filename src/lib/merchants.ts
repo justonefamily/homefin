@@ -154,6 +154,7 @@ export function flowFor(data: HomeData, from: string, to: string): Flow {
     if (e.date < from || e.date > to) continue;
     if (e.internal) { internalDeposits++; continue; }
     if (e.status === "ignored") continue;
+    if (e.status === "refund") { group(sp, "refund:" + merchantKey(e.source), `${e.source} (refund)`, { amount: -e.amount, date: e.date, category: "refund" }); continue; }
     const src = data.incomeSources?.find((s) => s.id === e.sourceId);
     const key = src ? `src:${src.id}` : merchantKey(e.source);
     group(inc, key, src?.name ?? e.source, { amount: e.amount, date: e.date, category: "income" });
@@ -174,7 +175,7 @@ export function flowFor(data: HomeData, from: string, to: string): Flow {
     if (c.kind !== "transfer") bump(t.accountId, "out", t.amount);
   }
   const sum = (m: Map<string, FlowLine>) => [...m.values()].reduce((s, l) => s + l.amount, 0);
-  const sortDesc = (m: Map<string, FlowLine>) => [...m.values()].sort((a, b) => b.amount - a.amount);
+  const sortDesc = (m: Map<string, FlowLine>) => [...m.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
   // Bills due in range but not paid
   const paid = new Set(data.payments.map((p) => `${p.billId}:${p.month}`));
   const unpaidBills: Flow["unpaidBills"] = [];

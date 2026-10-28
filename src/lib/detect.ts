@@ -159,7 +159,7 @@ export function detectIncome(data: HomeData, today = new Date()): IncomeSuggesti
   const groups = new Map<string, { date: string; amount: number }[]>();
   const known = new Set([...(data.incomeSources ?? []).map((s) => s.merchant ?? ""), ...(data.settings.dismissedIncome ?? [])]);
   for (const i of data.income ?? []) {
-    if (i.status === "ignored") continue;
+    if (i.status === "ignored" || i.status === "refund") continue;
     const k = merchantKey(i.source);
     if (k.length < 3 || i.amount < 50 || known.has(k)) continue;
     (groups.get(k) ?? groups.set(k, []).get(k)!).push({ date: i.date, amount: i.amount });

@@ -27,8 +27,8 @@ export function IncomeView({ today }: { today: Date }) {
     return { ...next, income: matchIncomeEvents(next) ?? next.income };
   }, `added income source ${sg.source}`);
   const ignoreSuggestion = (sg: IncomeSuggestion) => update((h) => ({ ...h, settings: { ...h.settings, dismissedIncome: [...(h.settings.dismissedIncome ?? []), sg.key] }, income: (h.income ?? []).map((e) => (merchantKey(e.source) === sg.key && !e.sourceId ? { ...e, status: "ignored" as const } : e)) }), `ignored ${sg.source}`);
-  const setEvent = (id: string, status: "counted" | "ignored" | undefined) => update((h) => ({ ...h, income: (h.income ?? []).map((e) => (e.id === id ? { ...e, status } : e)) }), status ? `${status} deposit` : "unreviewed deposit");
-  const setMany = (ids: string[], status: "counted" | "ignored", alwaysIgnoreKey?: string) => update((h) => ({
+  const setEvent = (id: string, status: IncomeEvent["status"]) => update((h) => ({ ...h, income: (h.income ?? []).map((e) => (e.id === id ? { ...e, status } : e)) }), status ? `${status} deposit` : "unreviewed deposit");
+  const setMany = (ids: string[], status: NonNullable<IncomeEvent["status"]>, alwaysIgnoreKey?: string) => update((h) => ({
     ...h,
     income: (h.income ?? []).map((e) => (ids.includes(e.id) ? { ...e, status } : e)),
     settings: alwaysIgnoreKey ? { ...h.settings, dismissedIncome: [...new Set([...(h.settings.dismissedIncome ?? []), alwaysIgnoreKey])] } : h.settings,
@@ -93,6 +93,7 @@ export function IncomeView({ today }: { today: Date }) {
                     <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold truncate">{g.label}</div><div className="text-[11px] text-muted">{g.items.length} deposits{g.sameAmount ? ` · same amount ${money(g.items[0].amount)}` : ""} · {money(g.total)} total</div></div>
                     <div className="flex gap-1.5 flex-wrap">
                       <button onClick={() => setMany(g.items.map((e) => e.id), "counted")} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">Count all {g.items.length}</button>
+                      <button onClick={() => setMany(g.items.map((e) => e.id), "refund")} title="A merchant giving money back — offsets spending, isn't income" className="h-8 px-2.5 rounded-[8px] border border-chip bg-card text-[11px] font-semibold hover:border-field">All refunds</button>
                       <button onClick={() => setMany(g.items.map((e) => e.id), "ignored")} className="h-8 px-2.5 rounded-[8px] border border-chip bg-card text-[11px] font-semibold hover:border-field">Ignore all {g.items.length}</button>
                       <button onClick={() => setMany(g.items.map((e) => e.id), "ignored", g.key)} title="Ignore these and never ask about this payer again" className="h-8 px-2.5 rounded-[8px] text-[11px] font-semibold text-muted hover:bg-surface">Always ignore</button>
                     </div>
@@ -103,6 +104,7 @@ export function IncomeView({ today }: { today: Date }) {
                     <div className="flex-1 min-w-0"><div className={cx("text-[13px] truncate", g.items.length > 1 ? "text-muted" : "font-semibold")}>{g.items.length > 1 ? new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : e.source}</div>{g.items.length === 1 && <div className="text-[11px] text-muted">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>}</div>
                     <div className="text-sm font-semibold mr-1">{money(e.amount)}</div>
                     <button onClick={() => setEvent(e.id, "counted")} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">{g.items.length > 1 ? "Count" : "Count as income"}</button>
+                    <button onClick={() => setEvent(e.id, "refund")} title="A merchant giving money back — offsets spending, isn't income" className="h-8 px-2.5 rounded-[8px] text-[11px] font-semibold text-muted hover:bg-surface">Refund</button>
                     <button onClick={() => setEvent(e.id, "ignored")} className="h-8 px-2.5 rounded-[8px] text-[11px] font-semibold text-muted hover:bg-surface">Ignore</button>
                   </div>
                 ))}
@@ -121,7 +123,7 @@ export function IncomeView({ today }: { today: Date }) {
   );
 }
 
-function Reviewed({ data, month, setEvent }: { data: ReturnType<typeof useHome.getState>["data"] & object; month: string; setEvent: (id: string, s: "counted" | "ignored" | undefined) => void }) {
+function Reviewed({ data, month, setEvent }: { data: ReturnType<typeof useHome.getState>["data"] & object; month: string; setEvent: (id: string, s: IncomeEvent["status"]) => void }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<IncomeEvent | null>(null);
@@ -130,8 +132,9 @@ function Reviewed({ data, month, setEvent }: { data: ReturnType<typeof useHome.g
   // One row per payer: "FLORA payroll · 2× · $9,500", expandable to the individual deposits.
   const groups = groupDeposits(items).map((g) => {
     const src = g.items.find((e) => e.sourceId) ? data.incomeSources?.find((s) => s.id === g.items.find((e) => e.sourceId)!.sourceId) : undefined;
-    const counted = g.items.filter((e) => e.status !== "ignored");
-    return { ...g, label: src?.name ?? g.label, countedTotal: counted.reduce((s, e) => s + e.amount, 0), allIgnored: counted.length === 0, latest: g.items[0] };
+    const counted = g.items.filter((e) => e.status !== "ignored" && e.status !== "refund");
+    const refunds = g.items.filter((e) => e.status === "refund");
+    return { ...g, label: src?.name ?? g.label, countedTotal: counted.reduce((s, e) => s + e.amount, 0), allIgnored: counted.length === 0, allRefunds: refunds.length === g.items.length, latest: g.items[0] };
   });
   return (
     <div className="flex flex-col gap-2">
@@ -143,15 +146,17 @@ function Reviewed({ data, month, setEvent }: { data: ReturnType<typeof useHome.g
               <div className="flex items-center gap-3 px-4 py-2.5">
                 <button onClick={() => setExpanded(expanded === g.key ? null : g.key)} aria-expanded={expanded === g.key} className="flex-1 min-w-0 text-left">
                   <div className="text-[13px] font-semibold truncate">{g.label}</div>
-                  <div className="text-[11px] text-muted">{g.items.length}× · {g.allIgnored ? "ignored" : g.items.some((e) => e.status === "ignored") ? `${g.items.filter((e) => e.status !== "ignored").length} counted` : "counted"} · <span className="text-accent font-semibold">{expanded === g.key ? "hide" : "see each"}</span></div>
+                  <div className="text-[11px] text-muted">{g.items.length}× · {g.allRefunds ? "refunds" : g.allIgnored ? "ignored" : g.items.some((e) => e.status !== "counted" && !e.sourceId) ? `${g.items.filter((e) => e.status !== "ignored" && e.status !== "refund").length} counted` : "counted"} · <span className="text-accent font-semibold">{expanded === g.key ? "hide" : "see each"}</span></div>
                 </button>
-                <div className={cx("text-sm font-semibold", g.allIgnored && "line-through text-muted")}>{money(g.allIgnored ? g.total : g.countedTotal)}</div>
+                <div className={cx("text-sm font-semibold", g.allRefunds ? "text-amber" : g.allIgnored && "line-through text-muted")}>{g.allRefunds ? `↩ ${money(g.total)}` : money(g.allIgnored ? g.total : g.countedTotal)}</div>
               </div>
               {expanded === g.key && g.items.map((e) => (
                 <div key={e.id} className="flex items-center gap-3 pl-8 pr-4 py-2 bg-surface/50 border-t border-line-soft">
                   <button onClick={() => setDetail(e)} className="flex-1 min-w-0 text-left"><div className="text-[12px] text-muted">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {e.internal ? "transfer" : e.sourceId ? data.incomeSources?.find((s) => s.id === e.sourceId)?.name ?? "source" : e.status} · <span className="text-accent font-semibold">details</span></div></button>
-                  <div className={cx("text-[13px] font-semibold", e.status === "ignored" && "line-through text-muted")}>{money(e.amount)}</div>
-                  <button onClick={() => setEvent(e.id, e.status === "ignored" ? "counted" : "ignored")} className="h-7 px-2 rounded-[8px] text-[11px] font-semibold text-accent hover:bg-accent-bg">{e.status === "ignored" ? "Count" : "Ignore"}</button>
+                  <div className={cx("text-[13px] font-semibold", e.status === "ignored" && "line-through text-muted", e.status === "refund" && "text-amber")}>{e.status === "refund" ? "↩ " : ""}{money(e.amount)}</div>
+                  <select aria-label="Status" className="h-7 rounded-[8px] border border-line bg-card text-[11px] font-semibold px-1" value={e.sourceId ? "counted" : e.status ?? ""} onChange={(ev) => setEvent(e.id, (ev.target.value || undefined) as IncomeEvent["status"])}>
+                    <option value="counted">Counted</option><option value="refund">Refund</option><option value="ignored">Ignored</option><option value="">Unreviewed</option>
+                  </select>
                 </div>
               ))}
             </div>

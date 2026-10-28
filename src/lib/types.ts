@@ -139,7 +139,8 @@ export interface BalancePoint { accountId: string; date: string; balance: number
 
 /** Money actually received (Plaid deposits or manual). `status` is the user's call: counted as income, or ignored (transfers, refunds). */
 export interface IncomeEvent {
-  id: string; date: string; amount: number; source: string; sourceId?: string; status?: "counted" | "ignored";
+  /** counted = income · ignored = not money of ours · refund = a merchant giving money back (offsets spending, not income) */
+  id: string; date: string; amount: number; source: string; sourceId?: string; status?: "counted" | "ignored" | "refund";
   /** Account the deposit landed in (Plaid). */
   accountId?: string;
   /** True when this deposit was matched to money leaving another of your accounts — an internal transfer, auto-ignored. */

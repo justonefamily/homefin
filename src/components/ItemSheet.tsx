@@ -154,10 +154,10 @@ export function DepositSheet({ event, onClose }: { event: IncomeEvent; onClose: 
   const key = merchantKey(event.source);
   const siblings = (data.income ?? []).filter((e) => merchantKey(e.source) === key).sort((a, b) => b.date.localeCompare(a.date));
   const src = data.incomeSources?.find((s) => s.id === event.sourceId);
-  const total = siblings.filter((e) => e.status !== "ignored").reduce((s, e) => s + e.amount, 0);
-  const setStatus = (status: "counted" | "ignored" | undefined) => { update((h) => ({ ...h, income: (h.income ?? []).map((e) => (e.id === event.id ? { ...e, status, internal: undefined } : e)) }), `${event.source}: ${status ?? "unreviewed"}`); onClose(); };
+  const total = siblings.filter((e) => e.status !== "ignored" && e.status !== "refund").reduce((s, e) => s + e.amount, 0);
+  const setStatus = (status: IncomeEvent["status"]) => { update((h) => ({ ...h, income: (h.income ?? []).map((e) => (e.id === event.id ? { ...e, status, internal: undefined } : e)) }), `${event.source}: ${status ?? "unreviewed"}`); onClose(); };
   const alwaysIgnore = () => { update((h) => ({ ...h, income: (h.income ?? []).map((e) => (merchantKey(e.source) === key ? { ...e, status: "ignored" as const } : e)), settings: { ...h.settings, dismissedIncome: [...new Set([...(h.settings.dismissedIncome ?? []), key])] } }), `${event.source}: always ignore`); onClose(); };
-  const status = event.internal ? "Transfer between your accounts (matched to a withdrawal)" : event.sourceId ? `Counted · ${src?.name ?? "income source"}` : event.status === "ignored" ? "Ignored (not income)" : event.status === "counted" ? "Counted as income" : "Not reviewed yet";
+  const status = event.internal ? "Transfer between your accounts (matched to a withdrawal)" : event.sourceId ? `Counted · ${src?.name ?? "income source"}` : event.status === "refund" ? "Refund — offsets spending, not income" : event.status === "ignored" ? "Ignored (not income)" : event.status === "counted" ? "Counted as income" : "Not reviewed yet";
   return (
     <Modal open onClose={onClose} title={event.source}>
       <div className={cx("rounded-[12px] px-3 py-2 text-[12px] font-semibold -mt-1", event.status === "ignored" || event.internal ? "bg-surface text-muted" : event.status || event.sourceId ? "bg-accent-bg text-accent" : "bg-amber-bg text-amber")}>{status}</div>
@@ -182,6 +182,7 @@ export function DepositSheet({ event, onClose }: { event: IncomeEvent; onClose: 
       </div>
       <div className="flex gap-2 flex-wrap">
         {event.status !== "counted" && <Button onClick={() => setStatus("counted")} className="h-10 px-3 text-xs">Count as income</Button>}
+        {event.status !== "refund" && <Button variant="secondary" onClick={() => setStatus("refund")} className="h-10 px-3 text-xs">It&apos;s a refund</Button>}
         {event.status !== "ignored" && <Button variant="secondary" onClick={() => setStatus("ignored")} className="h-10 px-3 text-xs">Ignore this one</Button>}
         <Button variant="secondary" onClick={alwaysIgnore} className="h-10 px-3 text-xs">Always ignore this payer</Button>
         {event.status && <Button variant="secondary" onClick={() => setStatus(undefined)} className="h-10 px-3 text-xs">Back to unreviewed</Button>}

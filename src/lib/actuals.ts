@@ -15,6 +15,7 @@ export function actualsByDay(data: HomeData, monthKey: string): DayActual[] {
   const days: DayActual[] = Array.from({ length: dim + 1 }, () => ({ income: 0, bills: 0, spend: 0, billNames: [] }));
   for (const e of data.income ?? []) {
     if (!e.date.startsWith(monthKey) || e.status === "ignored" || e.internal) continue;
+    if (e.status === "refund") { days[Number(e.date.slice(8, 10))].spend -= e.amount; continue; }
     days[Number(e.date.slice(8, 10))].income += e.amount;
   }
   const bills = billKeyMap(data);
