@@ -129,6 +129,8 @@ export interface Flow {
   byAccount: { accountId: string; in: number; out: number }[];
   /** Bills due in the range with no matching payment yet. */
   unpaidBills: { bill: Bill; dueDate: string }[];
+  /** Deposits in range that were matched to an outflow from another of your accounts (ignored). */
+  internalDeposits: number;
 }
 
 /** Everything that moved between `from` and `to` (inclusive, YYYY-MM-DD), across every account. */
@@ -141,8 +143,11 @@ export function flowFor(data: HomeData, from: string, to: string): Flow {
     e.amount += t.amount; e.count++; if (t.accountId && !e.accountIds.includes(t.accountId)) e.accountIds.push(t.accountId); if (t.date > e.date) e.date = t.date;
   };
   const inc = new Map<string, FlowLine>(), bl = new Map<string, FlowLine>(), sp = new Map<string, FlowLine>(), tr = new Map<string, FlowLine>();
+  let internalDeposits = 0;
   for (const e of data.income ?? []) {
-    if (e.date < from || e.date > to || e.status === "ignored") continue;
+    if (e.date < from || e.date > to) continue;
+    if (e.internal) { internalDeposits++; continue; }
+    if (e.status === "ignored") continue;
     const src = data.incomeSources?.find((s) => s.id === e.sourceId);
     const key = src ? `src:${src.id}` : merchantKey(e.source);
     group(inc, key, src?.name ?? e.source, { amount: e.amount, date: e.date, category: "income" });
@@ -183,6 +188,7 @@ export function flowFor(data: HomeData, from: string, to: string): Flow {
     incomeLines: sortDesc(inc), billLines: sortDesc(bl), spendLines: sortDesc(sp), transferLines: sortDesc(tr),
     byAccount: [...acct.entries()].map(([accountId, v]) => ({ accountId, ...v })).sort((a, b) => b.out + b.in - a.out - a.in),
     unpaidBills: unpaidBills.sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+    internalDeposits,
   };
 }
 
@@ -199,3 +205,39 @@ export const mergeMerchants = (data: HomeData, from: string, into: string): Home
 };
 export const setMerchantPref = (data: HomeData, key: string, patch: Partial<MerchantPref>): HomeData =>
   ({ ...data, settings: { ...data.settings, merchants: { ...(data.settings.merchants ?? {}), [key]: { ...prefFor(data, key), ...patch } } } });
+
+/* ------------------------------ Internal transfers ------------------------------ */
+
+const dayDiff = (a: string, b: string) => Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 86_400_000;
+
+/**
+ * Money that left one of your accounts and landed in another (Zelle to a spouse on the shared account,
+ * a card payment, a move to savings, a refund) is not income and not spending. Pair each unreviewed deposit
+ * with an outflow of the same amount within 3 days and mark both. Returns null when nothing changed.
+ */
+export function matchInternalTransfers(data: HomeData): HomeData | null {
+  const income = (data.income ?? []).slice();
+  const txs = data.transactions.slice();
+  const usedTx = new Set<string>();
+  let changed = 0;
+  for (let i = 0; i < income.length; i++) {
+    const e = income[i];
+    if (e.status || e.sourceId || e.internal) continue;
+    // Never pair against a merchant the user explicitly said is spending.
+    let best = -1, bestGap = 99;
+    for (let j = 0; j < txs.length; j++) {
+      const t = txs[j];
+      if (usedTx.has(t.id) || t.amount <= 0 || Math.abs(t.amount - e.amount) > 0.005) continue;
+      const gap = dayDiff(t.date, e.date);
+      if (gap > 3 || gap >= bestGap) continue;
+      if (prefFor(data, txKey(data, t)).kind === "spend") continue;
+      best = j; bestGap = gap;
+    }
+    if (best < 0) continue;
+    usedTx.add(txs[best].id);
+    txs[best] = { ...txs[best], transfer: true };
+    income[i] = { ...e, status: "ignored", internal: true };
+    changed++;
+  }
+  return changed ? { ...data, income, transactions: txs } : null;
+}

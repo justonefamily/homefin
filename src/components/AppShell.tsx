@@ -10,6 +10,7 @@ import { LocalAdapter } from "@/lib/storage/local";
 import { Button, Card, cx } from "./ui";
 import { importJson } from "@/lib/storage/local";
 import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
+import { matchInternalTransfers } from "@/lib/merchants";
 
 const NAV = [
   { href: "/", label: "Home", icon: Home },
@@ -35,6 +36,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     update((h) => ({ ...applyRecommendations(h, recs), settings: { ...h.settings, budgetsAppliedForQuarter: q } }), `auto-reset budgets for ${q}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.settings.autoApplyBudgetRecommendations, data?.settings.budgetsAppliedForQuarter]);
+  // Pair deposits with matching outflows across accounts (internal transfers) for data synced before this existed.
+  useEffect(() => {
+    if (!data) return;
+    const next = matchInternalTransfers(data);
+    if (next) update(() => next, "matched transfers between your accounts");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.transactions.length, data?.income?.length]);
   const [booted, setBooted] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);

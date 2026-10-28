@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyHome } from "./types";
-import { flowFor, merchantSummaries, mergeMerchants, setMerchantPref, similarMerchants } from "./merchants";
+import { flowFor, matchInternalTransfers, merchantSummaries, mergeMerchants, setMerchantPref, similarMerchants } from "./merchants";
 import { detectRecurring } from "./detect";
 
 const home = () => {
@@ -48,5 +48,23 @@ describe("merchants", () => {
     expect(f.byAccount.find((a) => a.accountId === "chk")?.out).toBe(230);
     h = setMerchantPref(h, "chase card", { kind: "spend" });
     expect(flowFor(h, "2026-10-12", "2026-10-18").spending).toBe(700);
+  });
+});
+
+describe("internal transfers", () => {
+  it("pairs a deposit with the matching outflow and ignores both", () => {
+    const h = home();
+    h.transactions.push({ id: "z1", accountId: "chk", date: "2026-10-20", description: "Zelle to Ledalis", amount: 300, category: "other" });
+    h.income!.push({ id: "z2", date: "2026-10-21", amount: 300, source: "Zelle from Abraham", accountId: "chk" });
+    const next = matchInternalTransfers(h)!;
+    expect(next).not.toBeNull();
+    expect(next.transactions.find((t) => t.id === "z1")?.transfer).toBe(true);
+    expect(next.income!.find((e) => e.id === "z2")).toMatchObject({ status: "ignored", internal: true });
+    const f = flowFor(next, "2026-10-19", "2026-10-22");
+    expect(f.income).toBe(0); expect(f.spending).toBe(0); expect(f.transfers).toBe(300); expect(f.internalDeposits).toBe(1);
+    expect(matchInternalTransfers(next)).toBeNull();
+  });
+  it("leaves a real deposit alone", () => {
+    expect(matchInternalTransfers(home())).toBeNull();
   });
 });

@@ -69,6 +69,8 @@ export interface Transaction {
   category: string; // budget category id
   /** Set at sync when the bank says this is a transfer between accounts (card payment, savings move) — not spending. */
   transfer?: boolean;
+  /** Plaid's detailed personal-finance category, kept so we can re-classify later. */
+  pfc?: string;
 }
 
 /** How the household wants a merchant treated. Keyed by merchant key (see detect.ts merchantKey). */
@@ -120,7 +122,13 @@ export interface Settings {
 export interface BalancePoint { accountId: string; date: string; balance: number; }
 
 /** Money actually received (Plaid deposits or manual). `status` is the user's call: counted as income, or ignored (transfers, refunds). */
-export interface IncomeEvent { id: string; date: string; amount: number; source: string; sourceId?: string; status?: "counted" | "ignored"; }
+export interface IncomeEvent {
+  id: string; date: string; amount: number; source: string; sourceId?: string; status?: "counted" | "ignored";
+  /** Account the deposit landed in (Plaid). */
+  accountId?: string;
+  /** True when this deposit was matched to money leaving another of your accounts — an internal transfer, auto-ignored. */
+  internal?: boolean;
+}
 
 /** An expected, recurring income — a paycheck or other regular money in. Actual deposits attach to it as IncomeEvents. */
 export interface IncomeSource {

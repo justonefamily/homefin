@@ -72,16 +72,23 @@ export function mergeTransactions(home: HomeData, added: PlaidTx[], removed: str
     return candidates.find((c) => home.budgets.some((b) => b.id === c)) ?? home.budgets[0]?.id ?? "other";
   };
   const existing = new Set(home.transactions.map((t) => t.id));
+  const tracksCards = home.accounts.some((a) => a.kind === "credit");
+  // Money moving between your own accounts is not spending: bank transfers, and credit-card payments when we track a card
+  // (if no card is linked, the payment is the only place that spending shows up, so it stays as spending).
+  const isTransfer = (t: PlaidTx) => {
+    const prim = t.personal_finance_category?.primary ?? "", det = t.personal_finance_category?.detailed ?? "";
+    return prim === "TRANSFER_OUT" || (det === "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT" && tracksCards);
+  };
   const fresh: Transaction[] = added
     .filter((t) => !existing.has(t.transaction_id) && t.amount > 0 && !t.pending)
-    .map((t) => ({ id: t.transaction_id, accountId: t.account_id, date: t.date, description: cleanName(t.merchant_name) || cleanName(t.name) || "Transaction", amount: t.amount, category: catFor(t), ...(t.personal_finance_category?.primary === "TRANSFER_OUT" ? { transfer: true } : {}) }));
+    .map((t) => ({ id: t.transaction_id, accountId: t.account_id, date: t.date, description: cleanName(t.merchant_name) || cleanName(t.name) || "Transaction", amount: t.amount, category: catFor(t), pfc: t.personal_finance_category?.detailed ?? undefined, ...(isTransfer(t) ? { transfer: true } : {}) }));
   const income = (home.income ?? []).slice();
   const SKIP_DEPOSITS = new Set(["TRANSFER_IN", "LOAN_PAYMENTS", "BANK_FEES"]);
   for (const t of added) {
     if (t.amount >= 0 || t.pending || income.some((i) => i.id === t.transaction_id)) continue;
     const prim = t.personal_finance_category?.primary ?? "";
     if (SKIP_DEPOSITS.has(prim)) continue;
-    income.push({ id: t.transaction_id, date: t.date, amount: -t.amount, source: cleanName(t.merchant_name) || cleanName(t.name) || "Deposit" });
+    income.push({ id: t.transaction_id, date: t.date, amount: -t.amount, source: cleanName(t.merchant_name) || cleanName(t.name) || "Deposit", accountId: t.account_id });
   }
   return { home: { ...home, transactions: [...home.transactions.filter((t) => !removedSet.has(t.id)), ...fresh], income }, added: fresh.length };
 }
