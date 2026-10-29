@@ -25,9 +25,26 @@ interface HomeStore {
   startFresh(name: string): Promise<void>;
   refreshSnapshots(): Promise<void>;
   restore(id: string): Promise<void>;
+  /** True while an edit is still waiting to reach the cloud (network dropped). */
+  pending: boolean;
+  /** Try the pending save again now (also runs automatically when the connection comes back). */
+  retrySave(): Promise<void>;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const isNetwork = (e: unknown) => /failed to fetch|load failed|networkerror|network request failed/i.test((e as Error)?.message ?? "");
+/** Save with a few retries for the "Failed to fetch" family — a phone hopping networks, a tab waking up. */
+async function saveWithRetry(adapter: StorageAdapter, data: HomeData, note: string) {
+  for (let attempt = 0; ; attempt++) {
+    try { await adapter.save(data, note); return; }
+    catch (e) {
+      if (!isNetwork(e) || attempt >= 3) throw e;
+      await wait(600 * 2 ** attempt);
+    }
+  }
+}
+let pendingNote = "edit";
 
 export const useHome = create<HomeStore>((set, get) => ({
   adapter: new LocalAdapter(),
@@ -35,6 +52,20 @@ export const useHome = create<HomeStore>((set, get) => ({
   snapshots: [],
   status: "idle",
   onboarded: false,
+  pending: false,
+
+  async retrySave() {
+    const d = get().data;
+    if (!d || !get().pending) return;
+    set({ status: "saving" });
+    try {
+      await saveWithRetry(get().adapter, d, pendingNote);
+      set({ status: "idle", pending: false, error: undefined, savedAt: new Date().toISOString() });
+      await get().refreshSnapshots();
+    } catch (e) {
+      set({ status: "error", error: (e as Error).message });
+    }
+  },
 
   async setAdapter(adapter) {
     set({ adapter, data: null });
@@ -57,17 +88,18 @@ export const useHome = create<HomeStore>((set, get) => ({
     const cur = get().data;
     if (!cur) return;
     const next = fn(cur);
-    set({ data: next, status: "saving" });
+    set({ data: next, status: "saving", pending: true });
+    pendingNote = note;
     // Debounce rapid edits into one save (and one snapshot).
     if (saveTimer) clearTimeout(saveTimer);
     await new Promise<void>((resolve) => {
       saveTimer = setTimeout(async () => {
         try {
-          await get().adapter.save(get().data!, note);
-          set({ status: "idle", savedAt: new Date().toISOString() });
+          await saveWithRetry(get().adapter, get().data!, note);
+          set({ status: "idle", pending: false, error: undefined, savedAt: new Date().toISOString() });
           await get().refreshSnapshots();
         } catch (e) {
-          set({ status: "error", error: (e as Error).message });
+          set({ status: "error", error: isNetwork(e) ? "no connection — your change is kept here and will save when you're back online" : (e as Error).message });
         }
         resolve();
       }, 400);
@@ -76,10 +108,11 @@ export const useHome = create<HomeStore>((set, get) => ({
 
   async replace(d0, note = "import") {
     const d = { ...d0, setupDone: true };
-    set({ data: d, status: "saving", onboarded: true });
+    set({ data: d, status: "saving", onboarded: true, pending: true });
+    pendingNote = note;
     try {
-      await get().adapter.save(d, note);
-      set({ status: "idle", savedAt: new Date().toISOString() });
+      await saveWithRetry(get().adapter, d, note);
+      set({ status: "idle", pending: false, error: undefined, savedAt: new Date().toISOString() });
       await get().refreshSnapshots();
     } catch (e) {
       set({ status: "error", error: (e as Error).message });

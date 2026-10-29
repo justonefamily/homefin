@@ -154,9 +154,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 export function SaveStatus() {
-  const { status, savedAt, error } = useHome();
+  const { status, savedAt, error, pending, retrySave } = useHome();
+  // When the connection comes back (or the tab wakes up), push anything still waiting.
+  useEffect(() => {
+    const go = () => { if (useHome.getState().pending && useHome.getState().status === "error") void retrySave(); };
+    window.addEventListener("online", go);
+    const vis = () => { if (document.visibilityState === "visible") go(); };
+    document.addEventListener("visibilitychange", vis);
+    const t = setInterval(go, 30_000);
+    return () => { window.removeEventListener("online", go); document.removeEventListener("visibilitychange", vis); clearInterval(t); };
+  }, [retrySave]);
   if (status === "saving") return <span className="text-muted-2">Saving…</span>;
-  if (status === "error") return <span className="text-red">Save failed: {error}</span>;
+  if (status === "error") return <span className="text-red">Save failed: {error}{pending && <> · <button onClick={() => retrySave()} className="font-semibold underline">retry now</button></>}</span>;
   if (savedAt) return <span className="text-muted-2">Saved {new Date(savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>;
   return null;
 }
