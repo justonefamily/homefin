@@ -41,6 +41,18 @@ export function LedgerView({ today }: { today: Date }) {
   const accounts = [...data.accounts].sort((a, b) => `${a.institution} ${a.name}`.localeCompare(`${b.institution} ${b.name}`));
   const acctLabel = (id?: string) => { const a = id ? data.accounts.find((x) => x.id === id) : undefined; return a ? `${a.institution} · ${a.name}${a.mask ? ` ···${a.mask}` : ""}` : id === undefined ? "Manual" : "Removed account"; };
   const steppable = span === "month" || span === "period";
+  // A loan/card picked before any sync has collected its credits: offer the sync right here.
+  const picked = data.accounts.find((a) => a.id === accountId);
+  const needsSync = !!picked && picked.source === "plaid" && (picked.kind === "credit" || picked.kind === "loan" || picked.kind === "mortgage") && !data.settings.creditsBackfilledAt;
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const load = useHome((s) => s.load);
+  const sync = async () => {
+    setSyncing(true); setSyncMsg(null);
+    try { const r = await fetch("/api/plaid/sync", { method: "POST" }); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "sync failed"); await load(); setSyncMsg(j.pending?.length ? "Still loading at the bank — try again in a minute." : "Done."); }
+    catch (e) { setSyncMsg((e as Error).message); }
+    finally { setSyncing(false); }
+  };
 
   // Group by day for scanning.
   const days = useMemo(() => { const m = new Map<string, LedgerEntry[]>(); for (const r of rows) (m.get(r.date) ?? m.set(r.date, []).get(r.date)!).push(r); return [...m.entries()]; }, [rows]);
@@ -84,7 +96,12 @@ export function LedgerView({ today }: { today: Date }) {
         <Card className="p-3"><div className="text-[11px] text-muted">Net · {rows.length} line{rows.length === 1 ? "" : "s"}</div><div className={cx("text-[17px] font-bold", totals.net >= 0 ? "text-green" : "text-red")}>{totals.net >= 0 ? "+" : "−"}{money(Math.abs(totals.net))}</div></Card>
       </div>
 
-      {rows.length === 0 && <Card className="p-4 text-sm text-muted">Nothing in this window with these filters.</Card>}
+      {rows.length === 0 && (
+        <Card className="p-4 text-sm text-muted flex flex-col gap-2">
+          <div>Nothing in this window with these filters.</div>
+          {needsSync && <div className="text-[12px]">This is a loan or card account, and payments landing on it haven&apos;t been collected yet — they come in with a sync. <button onClick={sync} disabled={syncing} className="text-accent font-semibold">{syncing ? "Syncing…" : "Sync accounts now"}</button>{syncMsg && <span className="ml-2">{syncMsg}</span>}</div>}
+        </Card>
+      )}
 
       {rows.length > 0 && (
         <Card className="overflow-hidden">
