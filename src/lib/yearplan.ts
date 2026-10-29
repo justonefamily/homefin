@@ -40,6 +40,9 @@ export function buildYearPlan(data: HomeData, year: number, today = new Date(), 
   const plannedEverydayFor = (key: string) => plannedEveryday(data, key);
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
   const extra = data.settings.extraPayment;
+  // Planning from the budget: the extra debt payment and the landmarks are already inside the budget's categories
+  // (Loans / Credit Cards, Gifting, Vacation & Trips…), so they're shown but not taken out of net a second time.
+  const inBudget = data.settings.planBasis === "budget";
   const startBalance = includeStartBalance ? data.accounts.filter((a) => a.kind === "checking").reduce((s, a) => s + a.balance, 0) : 0;
   const landmarks = (data.landmarks ?? []).filter((l) => l.month.startsWith(String(year)));
 
@@ -75,9 +78,10 @@ export function buildYearPlan(data: HomeData, year: number, today = new Date(), 
     const everydayPlan = plannedEverydayFor(key);
     const everyday = source === "actual" ? act!.spend : source === "blend" ? act!.spend + everydayPlan * left : everydayPlan;
     const debtExtra = source === "actual" ? 0 : remaining > 0 ? extra : 0;
-    const net = income - bills - everyday - debtExtra - landmarkTotal;
+    const extraOut = inBudget ? 0 : debtExtra + landmarkTotal;
+    const net = income - bills - everyday - extraOut;
     cumulative += net;
-    const futureNet = source === "actual" ? 0 : source === "blend" ? plannedIncome * left - ahead - everydayPlan * left - debtExtra - landmarkTotal : net;
+    const futureNet = source === "actual" ? 0 : source === "blend" ? plannedIncome * left - ahead - everydayPlan * left - extraOut : net;
     cumFuture += futureNet;
     const pocket = includeStartBalance ? startBalance + cumFuture : cumulative;
     return { key, name: new Date(year, m, 1).toLocaleString("en-US", { month: "short" }), index: m, income, bills, everyday, debtExtra, landmarks: lm, landmarkTotal, net, cumulative, pocket, debtRemaining: remaining, source };
@@ -88,7 +92,7 @@ export function buildYearPlan(data: HomeData, year: number, today = new Date(), 
   const done = months.filter((x) => x.source !== "plan");
   return {
     year, months, startBalance,
-    toDate: { income: done.reduce((s, x) => s + x.income, 0), spending: done.reduce((s, x) => s + x.bills + x.everyday + x.landmarkTotal, 0), months: done.length },
-    totals: { income: sum((x) => x.income), bills: sum((x) => x.bills), everyday: sum((x) => x.everyday), landmarks: sum((x) => x.landmarkTotal), debtPaid: Math.max(0, debtStart - debtEnd), spending: sum((x) => x.bills + x.everyday + x.debtExtra + x.landmarkTotal), net: cumulative, pocketEnd: months[11].pocket, debtStart, debtEnd, landmarkCount: landmarks.length },
+    toDate: { income: done.reduce((s, x) => s + x.income, 0), spending: done.reduce((s, x) => s + x.bills + x.everyday + (inBudget ? 0 : x.landmarkTotal), 0), months: done.length },
+    totals: { income: sum((x) => x.income), bills: sum((x) => x.bills), everyday: sum((x) => x.everyday), landmarks: sum((x) => x.landmarkTotal), debtPaid: Math.max(0, debtStart - debtEnd), spending: sum((x) => x.bills + x.everyday + (inBudget ? 0 : x.debtExtra + x.landmarkTotal)), net: cumulative, pocketEnd: months[11].pocket, debtStart, debtEnd, landmarkCount: landmarks.length },
   };
 }
