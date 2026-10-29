@@ -135,6 +135,8 @@ export interface Settings {
   dismissedSuggestions?: string[];
   /** Plaid account ids the user hid — sync skips them without disconnecting the bank. */
   hiddenAccounts?: string[];
+  /** Set once every linked bank has been re-pulled from the start to collect loan/card credits (payment destinations). */
+  creditsBackfilledAt?: string;
   /** Merchant pairs the user said are NOT the same place ("keyA|keyB", sorted) — never suggested again. */
   notSamePlace?: string[];
   /** Deposit merchant keys the user said are not income sources. */

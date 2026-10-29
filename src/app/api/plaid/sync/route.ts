@@ -28,6 +28,9 @@ export async function POST() {
   const problems: string[] = [];
   const client = plaid();
 
+  // First sync since we started keeping loan/card credits: re-pull every bank from the start so past payments get their
+  // destination too (ids are deduped, so nothing doubles). Decided once, before any bank is touched.
+  const needsHistory = !home.settings.creditsBackfilledAt;
   for (const it of items ?? []) {
     const label = it.institution ?? "Bank";
     // 1) Accounts + balances
@@ -63,9 +66,6 @@ export async function POST() {
     // 3) Transactions — may not be ready yet on a brand-new item
     try {
       // Plaid asks us to restart from the last saved cursor if its data moves mid-pagination; do that up to 3 times.
-      // First sync since we started keeping loan/card credits: re-pull history so old payments get their destination too
-      // (ids are deduped, so nothing doubles).
-      const needsHistory = home.credits === undefined;
       let attempts = 0, cursor = needsHistory ? undefined : it.cursor ?? undefined;
       for (;;) {
         try {
@@ -92,6 +92,7 @@ export async function POST() {
   }
 
   if (home.credits === undefined) home = { ...home, credits: [] };
+  if (needsHistory && problems.length === 0 && pending.length === 0) home = { ...home, settings: { ...home.settings, creditsBackfilledAt: new Date().toISOString() } };
   home = dedupeIncome(home) ?? home;
   home = matchInternalTransfers(home) ?? home;
   home = matchPaymentsToCredits(home) ?? home;
