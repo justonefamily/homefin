@@ -142,7 +142,7 @@ export function babySteps(data: HomeData): BabyStep[] {
 /* Budget splits (50/30/20, 6 Cans)                                    */
 /* ------------------------------------------------------------------ */
 
-export interface SplitRow { id: string; name: string; pct: number; what: string; target: number; actual: number;; /** which budget buckets feed this slice */ buckets: BudgetCategory["bucket"][] }
+export interface SplitRow { id: string; name: string; pct: number; what: string; target: number; actual: number; /** which budget buckets feed this slice */ buckets: BudgetCategory["bucket"][] }
 
 const SPLITS: Record<"503020" | "sixcans", { id: string; name: string; pct: number; what: string; buckets: BudgetCategory["bucket"][] }[]> = {
   "503020": [
