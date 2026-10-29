@@ -6,6 +6,7 @@ import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Segmented, cx, inputCls, money } from "./ui";
 import { flowFor, merchantSummaries, mergeMerchants, pairKey, similarMerchants, txKey, type FlowLine, type MerchantSummary } from "@/lib/merchants";
 import { ItemSheet, DepositSheet } from "./ItemSheet";
+import { LedgerView } from "./LedgerView";
 import { openFlags, removeFlag, resolveFlag, setFlagNote } from "@/lib/flags";
 import { Flag as FlagIcon, Check, Trash2 } from "lucide-react";
 import type { IncomeEvent } from "@/lib/types";
@@ -35,17 +36,18 @@ function rangeFor(data: HomeData, today: Date, kind: Range, offset: number): { f
 export function MoneyView({ today }: { today: Date }) {
   const data = useHome((s) => s.data)!;
   const flagged = openFlags(data).length;
-  const [tab, setTab] = useState<"flow" | "everyday" | "merchants" | "flags">(typeof location !== "undefined" && location.hash === "#everyday" ? "everyday" : typeof location !== "undefined" && location.hash === "#flags" ? "flags" : "flow");
+  const [tab, setTab] = useState<"flow" | "everyday" | "merchants" | "ledger" | "flags">(typeof location !== "undefined" && location.hash === "#everyday" ? "everyday" : typeof location !== "undefined" && location.hash === "#flags" ? "flags" : typeof location !== "undefined" && location.hash === "#ledger" ? "ledger" : "flow");
   return (
     <>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">Money</h1>
-        <div className="w-full sm:w-[26rem]"><Segmented size="sm" value={tab} onChange={setTab} options={[{ id: "flow", label: "In & out" }, { id: "everyday", label: "Everyday" }, { id: "merchants", label: "Merchants" }, { id: "flags", label: flagged ? `Flags · ${flagged}` : "Flags" }]} /></div>
+        <div className="w-full sm:w-[32rem]"><Segmented size="sm" value={tab} onChange={setTab} options={[{ id: "flow", label: "In & out" }, { id: "everyday", label: "Everyday" }, { id: "merchants", label: "Merchants" }, { id: "ledger", label: "Ledger" }, { id: "flags", label: flagged ? `Flags · ${flagged}` : "Flags" }]} /></div>
       </div>
       {tab === "flow" && <FlowView today={today} />}
       {tab === "flags" && <FlagsView />}
       {tab === "everyday" && <EverydayView today={today} />}
       {tab === "merchants" && <MerchantsView today={today} />}
+      {tab === "ledger" && <LedgerView today={today} />}
     </>
   );
 }
