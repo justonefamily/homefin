@@ -5,7 +5,7 @@ import { findFlag, toggleFlag } from "@/lib/flags";
 import { useHome } from "@/store/useHome";
 import { useItem } from "@/store/useItem";
 import { Button, Field, Modal, byName, cx, inputCls, money, selectCls } from "./ui";
-import { billKeyMap, merchantSummaries, merchantToBill, mergeMerchants, moveTransaction, prefFor, resolveKey, setMerchantPref, splitStatementName, txKey, unmergeMerchant } from "@/lib/merchants";
+import { billKeyMap, destinationsFor, merchantSummaries, merchantToBill, mergeMerchants, moveTransaction, prefFor, resolveKey, setMerchantPref, setPaymentDestination, splitStatementName, txKey, unmergeMerchant } from "@/lib/merchants";
 import { NATURE_LABEL, parseNature } from "@/lib/nature";
 import { MoreHorizontal } from "lucide-react";
 import { autoMarkPaid, detectRecurring, merchantKey, p2pLabel, suggestionToBill } from "@/lib/detect";
@@ -56,6 +56,11 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
   const nature = rawNames[0] ? parseNature(rawNames[0]) : null;
   const liabilities = data.accounts.filter((a) => a.kind === "credit" || a.kind === "loan" || a.kind === "mortgage").sort((a, b) => `${a.institution} ${a.name}`.localeCompare(`${b.institution} ${b.name}`));
   const paysDown = pref.paysDownAccountId ? data.accounts.find((a) => a.id === pref.paysDownAccountId) : undefined;
+  const acctLabel = (id?: string) => { const a = id ? data.accounts.find((x) => x.id === id) : undefined; return a ? `${a.institution} · ${a.name}${a.mask ? ` ···${a.mask}` : ""}` : "not matched yet"; };
+  // Where the money landed, per destination account (matched from the receiving side, or set by hand on a transaction).
+  const destinations = useMemo(() => destinationsFor(data, key), [data, key]);
+  const hasDestinations = destinations.some((d) => d.accountId);
+  const [destFor, setDestFor] = useState<string | null>(null); // transaction id whose destination is being picked
   // "On your statement": every distinct wording, as a checklist. Unchecked ones get split out into their own merchant on Save.
   const wordings = useMemo(() => { const m = new Map<string, { count: number; total: number; last: string }>(); for (const t of txs) { const e = m.get(t.description) ?? { count: 0, total: 0, last: t.date }; e.count++; e.total += t.amount; if (t.date > e.last) e.last = t.date; m.set(t.description, e); } return [...m.entries()].map(([desc, v]) => ({ desc, ...v })).sort((a, b) => b.count - a.count || b.total - a.total); }, [txs]);
   const [showWordings, setShowWordings] = useState(false);
@@ -169,6 +174,18 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
         </div>
       )}
       {me && me.accountIds.length > 0 && <div className="flex flex-wrap gap-1.5">{me.accountIds.map((id) => <AccountChip key={id} data={data} id={id} />)}</div>}
+      {hasDestinations && (
+        <div className="rounded-[12px] border border-line overflow-hidden">
+          <div className="px-3 py-2 text-[11px] font-semibold text-muted bg-surface border-b border-line">Where it went · matched to the account that received it</div>
+          {destinations.map((d) => (
+            <div key={d.accountId ?? "none"} className="flex items-center gap-3 px-3 py-2 border-b border-line-soft last:border-b-0 text-[12px]">
+              <div className={cx("flex-1 min-w-0 truncate", !d.accountId && "text-muted")}>{d.accountId ? acctLabel(d.accountId) : "Not matched yet — pick on the transaction"}</div>
+              <div className="text-muted">{d.count}×</div>
+              <div className="font-semibold">{money(d.total)}</div>
+            </div>
+          ))}
+        </div>
+      )}
       {me && me.merged.length > 0 && (
         <div className="rounded-[12px] border border-line overflow-hidden">
           <div className="px-3 py-2 text-[11px] font-semibold text-muted bg-surface border-b border-line">Merged into this · {me.merged.length}</div>
@@ -189,11 +206,26 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
           {shown.map((t) => { const a = data.accounts.find((x) => x.id === t.accountId); return (
             <div key={t.id}>
             <div className={cx("flex items-center gap-2 px-3 py-2 border-b border-line-soft text-[12px]", findFlag(data, "transaction", t.id) && "bg-amber-bg/60", t.merchantOverride && "border-l-2 border-l-accent")}>
-              <div className="flex-1 min-w-0"><div className="break-words leading-snug">{t.description}</div><div className="text-[11px] text-muted">{day(t.date)}{a ? ` · ${a.institution} · ${a.name}` : ""}</div></div>
+              <div className="flex-1 min-w-0"><div className="break-words leading-snug">{t.description}</div><div className="text-[11px] text-muted">{day(t.date)}{a ? ` · ${a.institution} · ${a.name}` : ""}</div>
+                {(t.toAccountId || hasDestinations || liabilities.length > 0 && (pref.kind === "transfer" || paysDown)) && (
+                  <button onClick={() => setDestFor(destFor === t.id ? null : t.id)} className={cx("mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold", t.toAccountId ? "bg-accent-bg text-accent" : "bg-amber-bg text-amber")}>→ {t.toAccountId ? acctLabel(t.toAccountId) : "where did this go?"}{t.toAccountManual && <span className="font-normal">· by hand</span>}</button>
+                )}
+              </div>
               <div className="font-semibold">{money(t.amount)}</div>
               <FlagButton kind="transaction" refId={t.id} label={`${displayName} · ${money(t.amount)} · ${day(t.date)}`} compact />
               <button onClick={() => { setMoving(moving === t.id ? null : t.id); setMoveQuery(""); }} aria-label="Move this transaction" aria-expanded={moving === t.id} className={cx("w-7 h-7 rounded-full flex items-center justify-center shrink-0", moving === t.id ? "bg-ink text-white" : "text-muted-3 hover:bg-surface hover:text-ink")}><MoreHorizontal size={14} /></button>
             </div>
+            {destFor === t.id && (
+              <div className="px-3 py-2 bg-surface border-b border-line-soft flex flex-col gap-1.5 text-[12px]">
+                <div className="text-muted">This payment went to…</div>
+                <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                  {liabilities.map((l) => (
+                    <button key={l.id} onClick={() => { update((h) => setPaymentDestination(h, t.id, l.id), `payment went to ${l.name}`); setDestFor(null); }} className={cx("text-left px-3 py-1.5 rounded-[8px] border bg-card hover:border-field", t.toAccountId === l.id ? "border-accent" : "border-line")}><b>{l.institution}</b> · {l.name}{l.mask ? <span className="text-muted"> ···{l.mask}</span> : null}</button>
+                  ))}
+                  {t.toAccountId && <button onClick={() => { update((h) => setPaymentDestination(h, t.id, undefined), "cleared a payment destination"); setDestFor(null); }} className="text-left px-3 py-1.5 rounded-[8px] text-muted hover:text-ink">Clear — don&apos;t know</button>}
+                </div>
+              </div>
+            )}
             {moving === t.id && (
               <div className="px-3 py-2 bg-surface border-b border-line-soft flex flex-col gap-2 text-[12px]">
                 <div className="text-muted">Move just this one {t.merchantOverride ? <>(currently moved here by hand · <button onClick={() => { update((h) => moveTransaction(h, t.id, undefined), "put a transaction back"); setMoving(null); }} className="text-accent font-semibold">put it back</button>)</> : ""}</div>

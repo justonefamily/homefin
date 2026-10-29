@@ -80,7 +80,14 @@ export interface Transaction {
   pfc?: string;
   /** This one transaction belongs to a different merchant than its description says (set from the item page). */
   merchantOverride?: string;
+  /** Where this payment landed — one of your own loan/card accounts. Matched from the receiving side's credit, or set by hand. */
+  toAccountId?: string;
+  /** True when toAccountId was chosen by hand (sync won't change it). */
+  toAccountManual?: boolean;
 }
+
+/** A credit received on a loan or card account — the payment arriving on the other side. Used to tell which account a bank payment went to. */
+export interface Credit { id: string; accountId: string; date: string; amount: number; description: string; }
 
 /** How the household wants a merchant treated. Keyed by merchant key (see detect.ts merchantKey). */
 export interface MerchantPref {
@@ -250,6 +257,8 @@ export interface HomeData {
   calendar?: CalendarItem[];
   /** Grocery list state per week (key = YYYY-MM-DD of the Sunday): items checked off, and extras typed by hand. */
   grocery?: Record<string, { checked: string[]; extras: string[] }>;
+  /** Payments received on loan/card accounts (the receiving side of your own payments). Undefined = never collected yet → next sync re-pulls history. */
+  credits?: Credit[];
   /** Things flagged for a later look: a whole merchant, one transaction, or one deposit. */
   flags?: Flag[];
   /** Imported credit reports (parsed on-device; no SSN or addresses kept). See lib/credit. */

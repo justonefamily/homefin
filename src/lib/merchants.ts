@@ -48,7 +48,9 @@ export function debtPaymentsFor(data: HomeData, accountId: string, from?: string
     if (t.amount <= 0 || (from && t.date < from) || (to && t.date > to)) continue;
     const c = classify(data, t, bills);
     if (c.kind === "ignore") continue;
-    if (prefFor(data, c.key).paysDownAccountId !== accountId) continue;
+    // A matched destination wins; otherwise fall back to the merchant-level "pays down" setting.
+    const dest = t.toAccountId ?? prefFor(data, c.key).paysDownAccountId;
+    if (dest !== accountId) continue;
     total += t.amount; count++; if (!last || t.date > last) last = t.date;
   }
   return { total, count, last };
@@ -337,6 +339,54 @@ export function matchInternalTransfers(data: HomeData, windowDays = TRANSFER_WIN
     changed++;
   }
   return changed ? { ...data, income, transactions: txs } : null;
+}
+
+/**
+ * Tell each outgoing payment which of your own loan/card accounts it landed in, by pairing it with the credit the receiving
+ * account recorded (same amount, within the transfer window). Hand-set destinations are left alone. Returns null if nothing changed.
+ */
+export function matchPaymentsToCredits(data: HomeData, windowDays = TRANSFER_WINDOW_DAYS): HomeData | null {
+  const credits = data.credits ?? [];
+  if (!credits.length) return null;
+  const txs = data.transactions.slice();
+  const used = new Set(txs.filter((t) => t.toAccountId).map((t) => t.toAccountId + "|" + t.date + "|" + t.amount));
+  const takenCredit = new Set<string>();
+  let changed = 0;
+  // Credits already explained by a hand-set transaction shouldn't be handed to another one.
+  for (const c of credits) if (used.has(c.accountId + "|" + c.date + "|" + c.amount)) takenCredit.add(c.id);
+  for (const c of credits) {
+    if (takenCredit.has(c.id)) continue;
+    let best = -1, bestGap = 99;
+    for (let j = 0; j < txs.length; j++) {
+      const t = txs[j];
+      if (t.amount <= 0 || t.toAccountId || t.accountId === c.accountId || Math.abs(t.amount - c.amount) > 0.005) continue;
+      const gap = dayDiff(t.date, c.date);
+      if (gap > windowDays || gap >= bestGap) continue;
+      if (prefFor(data, txKey(data, t)).kind === "spend") continue;
+      best = j; bestGap = gap;
+    }
+    if (best < 0) continue;
+    takenCredit.add(c.id);
+    txs[best] = { ...txs[best], toAccountId: c.accountId };
+    changed++;
+  }
+  return changed ? { ...data, transactions: txs } : null;
+}
+
+/** Set (or clear) where one payment went, by hand. */
+export function setPaymentDestination(data: HomeData, txId: string, accountId: string | undefined): HomeData {
+  return { ...data, transactions: data.transactions.map((t) => (t.id === txId ? { ...t, toAccountId: accountId, toAccountManual: accountId ? true : undefined } : t)) };
+}
+
+/** Where a merchant's payments went, by destination account: [{accountId|undefined, total, count}], biggest first. */
+export function destinationsFor(data: HomeData, key: string, from?: string, to?: string): { accountId?: string; total: number; count: number }[] {
+  const m = new Map<string | undefined, { total: number; count: number }>();
+  for (const t of data.transactions) {
+    if (t.amount <= 0 || (from && t.date < from) || (to && t.date > to) || txKey(data, t) !== key) continue;
+    const e = m.get(t.toAccountId) ?? { total: 0, count: 0 };
+    e.total += t.amount; e.count++; m.set(t.toAccountId, e);
+  }
+  return [...m.entries()].map(([accountId, v]) => ({ accountId, ...v })).sort((a, b) => b.total - a.total);
 }
 
 /* ------------------------------ Duplicate deposits ------------------------------ */

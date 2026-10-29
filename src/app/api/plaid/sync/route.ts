@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { mergeAccounts, mergeTransactions, plaid, plaidError } from "@/lib/plaid";
 import { autoMarkPaid, matchIncomeEvents } from "@/lib/detect";
-import { dedupeIncome, matchInternalTransfers } from "@/lib/merchants";
+import { dedupeIncome, matchInternalTransfers, matchPaymentsToCredits } from "@/lib/merchants";
 import { adminClient } from "@/lib/supabase/server";
 import { CountryCode } from "plaid";
 import type { HomeData } from "@/lib/types";
@@ -63,7 +63,10 @@ export async function POST() {
     // 3) Transactions — may not be ready yet on a brand-new item
     try {
       // Plaid asks us to restart from the last saved cursor if its data moves mid-pagination; do that up to 3 times.
-      let attempts = 0, cursor = it.cursor ?? undefined;
+      // First sync since we started keeping loan/card credits: re-pull history so old payments get their destination too
+      // (ids are deduped, so nothing doubles).
+      const needsHistory = home.credits === undefined;
+      let attempts = 0, cursor = needsHistory ? undefined : it.cursor ?? undefined;
       for (;;) {
         try {
           let c = cursor; let more = true; let staged = home; let added = 0;
@@ -88,8 +91,10 @@ export async function POST() {
     }
   }
 
+  if (home.credits === undefined) home = { ...home, credits: [] };
   home = dedupeIncome(home) ?? home;
   home = matchInternalTransfers(home) ?? home;
+  home = matchPaymentsToCredits(home) ?? home;
   const matched = matchIncomeEvents(home);
   if (matched) home = { ...home, income: matched };
   const autoPaid = autoMarkPaid(home);

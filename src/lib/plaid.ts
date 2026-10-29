@@ -83,12 +83,21 @@ export function mergeTransactions(home: HomeData, added: PlaidTx[], removed: str
     .filter((t) => !existing.has(t.transaction_id) && t.amount > 0 && !t.pending)
     .map((t) => ({ id: t.transaction_id, accountId: t.account_id, date: t.date, description: cleanName(t.merchant_name) || cleanName(t.name) || "Transaction", amount: t.amount, category: catFor(t), pfc: t.personal_finance_category?.detailed ?? undefined, ...(isTransfer(t) ? { transfer: true } : {}) }));
   const income = (home.income ?? []).slice();
+  const credits = (home.credits ?? []).slice();
+  const creditIds = new Set(credits.map((c) => c.id));
+  const liability = new Set(home.accounts.filter((a) => a.kind === "credit" || a.kind === "loan" || a.kind === "mortgage").map((a) => a.id));
   const SKIP_DEPOSITS = new Set(["TRANSFER_IN", "LOAN_PAYMENTS", "BANK_FEES"]);
   for (const t of added) {
-    if (t.amount >= 0 || t.pending || income.some((i) => i.id === t.transaction_id)) continue;
+    if (t.amount >= 0 || t.pending) continue;
+    // A credit on a loan or card is a payment arriving — keep it so the paying side can be told where it went.
+    if (liability.has(t.account_id)) {
+      if (!creditIds.has(t.transaction_id)) credits.push({ id: t.transaction_id, accountId: t.account_id, date: t.date, amount: -t.amount, description: cleanName(t.merchant_name) || cleanName(t.name) || "Payment" });
+      continue;
+    }
+    if (income.some((i) => i.id === t.transaction_id)) continue;
     const prim = t.personal_finance_category?.primary ?? "";
     if (SKIP_DEPOSITS.has(prim)) continue;
     income.push({ id: t.transaction_id, date: t.date, amount: -t.amount, source: cleanName(t.merchant_name) || cleanName(t.name) || "Deposit", accountId: t.account_id });
   }
-  return { home: { ...home, transactions: [...home.transactions.filter((t) => !removedSet.has(t.id)), ...fresh], income }, added: fresh.length };
+  return { home: { ...home, transactions: [...home.transactions.filter((t) => !removedSet.has(t.id)), ...fresh], income, credits: credits.filter((c) => !removedSet.has(c.id)) }, added: fresh.length };
 }

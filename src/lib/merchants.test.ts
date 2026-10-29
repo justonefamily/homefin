@@ -128,3 +128,18 @@ it("never suggests a pair the user said is not the same place", () => {
   ];
   expect(similarMerchants(list, ["7-eleven|eleven labs"])).toHaveLength(0);
 });
+
+it("matches an outgoing payment to the credit the loan account received", async () => {
+  const { matchPaymentsToCredits, setPaymentDestination } = await import("./merchants");
+  const h = home();
+  h.accounts.push({ id: "loan1", name: "Car", institution: "Credit Union", kind: "loan", balance: 1000, source: "manual" }, { id: "loan2", name: "Card", institution: "Credit Union", kind: "credit", balance: 500, source: "manual" });
+  h.transactions.push({ id: "p1", accountId: "chk", date: "2026-03-03", description: "CU ACH PAYMENT 0001", amount: 608.9, category: "other" }, { id: "p2", accountId: "chk", date: "2026-03-03", description: "CU ACH PAYMENT 0002", amount: 50, category: "other" });
+  h.settings.merchants = { "cu ach payment": { kind: "transfer" } };
+  h.credits = [{ id: "c1", accountId: "loan1", date: "2026-03-04", amount: 608.9, description: "PAYMENT - THANK YOU" }, { id: "c2", accountId: "loan2", date: "2026-03-05", amount: 50, description: "PAYMENT" }];
+  const out = matchPaymentsToCredits(h)!;
+  expect(out.transactions.find((t) => t.id === "p1")?.toAccountId).toBe("loan1");
+  expect(out.transactions.find((t) => t.id === "p2")?.toAccountId).toBe("loan2");
+  // A hand-set destination survives a re-match.
+  const manual = setPaymentDestination(out, "p1", "loan2");
+  expect(matchPaymentsToCredits(manual)).toBeNull();
+});
