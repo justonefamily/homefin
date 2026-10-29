@@ -115,7 +115,8 @@ export function babySteps(data: HomeData): BabyStep[] {
   const debtTotal = debts.reduce((s, d) => s + d.balance, 0);
   const mortgage = data.accounts.filter((a) => a.kind === "mortgage").reduce((s, a) => s + a.balance, 0);
   const nowKey = monthKey(new Date());
-  const monthlyExpenses = data.bills.filter((b) => (!b.startedOn || nowKey >= b.startedOn) && (!b.endedOn || nowKey <= b.endedOn)).reduce((s, b) => s + b.amount, 0) + data.settings.everydaySpend;
+  const monthlyBills = data.bills.filter((b) => (!b.startedOn || nowKey >= b.startedOn) && (!b.endedOn || nowKey <= b.endedOn)).reduce((s, b) => s + b.amount, 0);
+  const monthlyExpenses = monthlyBills + (data.settings.planBasis === "budget" ? Math.max(0, data.budgets.filter((b) => b.bucket !== "reimbursable").reduce((s, b) => s + b.limit, 0) - monthlyBills) : data.settings.everydaySpend);
   const efGoal = monthlyExpenses * data.settings.emergencyMonths;
   const starter = Math.min(1, data.settings.starterFundGoal ? savings / data.settings.starterFundGoal : 0);
 
@@ -181,16 +182,19 @@ export function splitRows(data: HomeData, strategy: "503020" | "sixcans", month:
 /* Budget vs actual                                                    */
 /* ------------------------------------------------------------------ */
 
-export interface BudgetRow { id: string; name: string; limit: number; spent: number; pct: number; state: "over" | "ahead" | "ok"; }
+export interface BudgetRow { id: string; name: string; limit: number; spent: number; pct: number; state: "over" | "ahead" | "ok"; /** spent − limit: positive = over */ over: number; ratio: number }
 
 export function budgetRows(data: HomeData, month: string, dayOfMonth: number, daysInMonth: number): BudgetRow[] {
   const pace = dayOfMonth / daysInMonth;
   const items = spendItems(data, [month]);
-  return data.budgets.map((c) => {
+  const rows: BudgetRow[] = data.budgets.map((c) => {
     const spent = items.filter((i) => i.category === c.id).reduce((s, i) => s + i.amount, 0);
     const ratio = c.limit ? spent / c.limit : 0;
-    return { id: c.id, name: c.name, limit: c.limit, spent, pct: Math.min(100, Math.round(ratio * 100)), state: spent > c.limit ? "over" : spent < c.limit && ratio > pace + 0.03 ? "ahead" : "ok" };
+    const state: BudgetRow["state"] = spent > c.limit ? "over" : spent < c.limit && ratio > pace + 0.03 ? "ahead" : "ok";
+    return { id: c.id, name: c.name, limit: c.limit, spent, pct: Math.min(100, Math.round(ratio * 100)), state, over: spent - c.limit, ratio };
   });
+  // Most over budget first, then by how far along the budget is, so the list re-orders itself as spending lands.
+  return rows.sort((a, b) => (b.over - a.over) || (b.ratio - a.ratio) || a.name.localeCompare(b.name));
 }
 
 export const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;

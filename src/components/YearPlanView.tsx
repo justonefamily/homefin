@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Flag, Plus, Target } from "lucide-react";
 import { STRATEGIES } from "@/lib/strategies";
 import { useHome } from "@/store/useHome";
-import { Button, Card, Eyebrow, Field, Modal, byName, cx, inputCls, money, selectCls } from "./ui";
+import { Button, Card, Eyebrow, Field, Modal, Segmented, byName, cx, inputCls, money, selectCls } from "./ui";
+import { budgetTotal, plannedEveryday } from "@/lib/projections";
 import { buildYearPlan, type PlanMonth } from "@/lib/yearplan";
 import { debtPaymentsFor } from "@/lib/merchants";
 import { PlanBreakdown, type BreakdownKind } from "./PlanBreakdown";
@@ -55,6 +56,9 @@ export function YearPlanView({ today }: { today: Date }) {
           <Field label="Debt strategy" hint={STRATEGIES.find((x) => x.id === data.settings.strategy)?.headline}><select className={selectCls} value={data.settings.strategy} onChange={(e) => setStrategy(e.target.value as StrategyId)}>{[...STRATEGIES].sort(byName).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
           <Field label="Extra toward debt each month ($)"><input className={inputCls} type="number" inputMode="decimal" value={data.settings.extraPayment || ""} onChange={(e) => setExtra(Number(e.target.value) || 0)} /></Field>
         </div>
+        <Field label="Plan the months ahead from" hint={data.settings.planBasis === "budget" ? `Your budget totals ${money(budgetTotal(data))}/mo. Bills are already inside their categories, so everyday = budget − that month's bills (${money(plannedEveryday(data, yp.months[11].key))} in Dec).` : `Bills as listed + the everyday estimate from Settings (${money(data.settings.everydaySpend)}/mo). Switch to "My budget" to plan from the limits you set under Plan → Budget.`}>
+          <Segmented size="sm" value={data.settings.planBasis ?? "estimate"} onChange={(v) => update((h) => ({ ...h, settings: { ...h.settings, planBasis: v } }), `plan from ${v === "budget" ? "budget" : "estimate"}`)} options={[{ id: "estimate", label: "Bills + everyday estimate" }, { id: "budget", label: "My budget" }]} />
+        </Field>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Field label="Target · in pocket, Dec"><input className={inputCls} type="number" inputMode="decimal" value={targets.pocket ?? ""} placeholder="e.g. 10000" onChange={(e) => setTarget({ pocket: e.target.value === "" ? undefined : Number(e.target.value) })} /></Field>
           <Field label="Target · debt left, Dec"><input className={inputCls} type="number" inputMode="decimal" value={targets.debt ?? ""} placeholder="0 = debt-free" onChange={(e) => setTarget({ debt: e.target.value === "" ? undefined : Number(e.target.value) })} /></Field>

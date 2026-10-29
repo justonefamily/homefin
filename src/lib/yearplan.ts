@@ -2,7 +2,7 @@ import type { HomeData, Landmark } from "./types";
 import { debtsFromAccounts, simulatePayoff } from "./strategies";
 import { expectedMonthlyIncome } from "./detect";
 import { actualsForMonth } from "./actuals";
-import { activeBills } from "./projections";
+import { plannedEveryday, activeBills } from "./projections";
 import { getDaysInMonth } from "date-fns";
 
 /**
@@ -37,7 +37,7 @@ export function billsStillAhead(data: HomeData, monthKey: string, today: Date) {
 export function buildYearPlan(data: HomeData, year: number, today = new Date(), includeStartBalance = true): YearPlan {
   const plannedIncome = expectedMonthlyIncome(data);
   const plannedBillsFor = (key: string) => activeBills(data, key).reduce((s, b) => s + b.amount, 0);
-  const plannedEveryday = data.settings.everydaySpend;
+  const plannedEverydayFor = (key: string) => plannedEveryday(data, key);
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
   const extra = data.settings.extraPayment;
   const startBalance = includeStartBalance ? data.accounts.filter((a) => a.kind === "checking").reduce((s, a) => s + a.balance, 0) : 0;
@@ -72,11 +72,12 @@ export function buildYearPlan(data: HomeData, year: number, today = new Date(), 
     const ahead = isNow ? billsStillAhead(data, key, today).reduce((s, b) => s + b.amount, 0) : 0;
     const plannedBills = plannedBillsFor(key);
     const bills = source === "actual" ? act!.bills : source === "blend" ? act!.bills + ahead : plannedBills;
-    const everyday = source === "actual" ? act!.spend : source === "blend" ? act!.spend + plannedEveryday * left : plannedEveryday;
+    const everydayPlan = plannedEverydayFor(key);
+    const everyday = source === "actual" ? act!.spend : source === "blend" ? act!.spend + everydayPlan * left : everydayPlan;
     const debtExtra = source === "actual" ? 0 : remaining > 0 ? extra : 0;
     const net = income - bills - everyday - debtExtra - landmarkTotal;
     cumulative += net;
-    const futureNet = source === "actual" ? 0 : source === "blend" ? plannedIncome * left - ahead - plannedEveryday * left - debtExtra - landmarkTotal : net;
+    const futureNet = source === "actual" ? 0 : source === "blend" ? plannedIncome * left - ahead - everydayPlan * left - debtExtra - landmarkTotal : net;
     cumFuture += futureNet;
     const pocket = includeStartBalance ? startBalance + cumFuture : cumulative;
     return { key, name: new Date(year, m, 1).toLocaleString("en-US", { month: "short" }), index: m, income, bills, everyday, debtExtra, landmarks: lm, landmarkTotal, net, cumulative, pocket, debtRemaining: remaining, source };

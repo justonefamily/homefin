@@ -66,6 +66,18 @@ export function periodRangeFor(data: HomeData, anchor: Date, period: Period): Pe
   return { period: defs.length < 2 ? "a" : period, from, to, label: fmtRange(from, to), anchor: new Date(y, m, 1) };
 }
 
+/** Total of the monthly budget limits that count as spending (reimbursable left out). */
+export const budgetTotal = (data: HomeData) => data.budgets.filter((b) => b.bucket !== "reimbursable").reduce((s, b) => s + b.limit, 0);
+/**
+ * Planned everyday spending for a month. With planBasis "budget", the budget is the plan: everything budgeted that isn't
+ * a bill that month. Otherwise the everyday estimate from Settings.
+ */
+export function plannedEveryday(data: HomeData, month: string): number {
+  if (data.settings.planBasis !== "budget") return data.settings.everydaySpend;
+  const bills = activeBills(data, month).reduce((s, b) => s + b.amount, 0);
+  return Math.max(0, budgetTotal(data) - bills);
+}
+
 /** Which pay period a calendar day (1–31) belongs to: "a" (first) or "b" (second). Single-period schedules are always "a". */
 export function periodOfDay(data: HomeData, day: number): Period {
   const defs = periodDefs(data);
@@ -184,7 +196,7 @@ export function weeklyProjection(data: HomeData, today: Date): WeekRow[] {
   const dim = getDaysInMonth(today);
   const payDays = expectedPayDays(data);
   const paycheck = expectedMonthlyIncome(data) / Math.max(1, payDays.length);
-  const everydayPerDay = data.settings.everydaySpend / dim;
+  const everydayPerDay = plannedEveryday(data, monthKey(today)) / dim;
   const statuses = billStatuses(data, today);
   // Days that already happened use what the bank recorded (when there is any); days ahead use the plan.
   const actual = actualsByDay(data, monthKey(today));
@@ -242,7 +254,7 @@ export function yearProjection(data: HomeData, today: Date): MonthRow[] {
     // Past months: use recorded transactions + bills paid that month if any; otherwise fall back to the template.
     const act = actualsForMonth(data, key);
     const bills = state === "past" && act.hasData ? act.bills : monthlyBills;
-    const everyday = state === "past" && act.hasData ? act.spend : data.settings.everydaySpend;
+    const everyday = state === "past" && act.hasData ? act.spend : plannedEveryday(data, key);
     const monthlyIncome = state === "past" && act.hasData ? act.income : expectedMonthlyIncome(data);
     const net = monthlyIncome - bills - everyday - (state === "past" ? 0 : data.settings.extraPayment);
     return { month: m, name: d.toLocaleString("en-US", { month: "short" }), key, income: monthlyIncome, bills, net, state };

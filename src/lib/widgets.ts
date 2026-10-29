@@ -2,7 +2,7 @@ import { spendItems } from "./actuals";
 import { getDaysInMonth } from "date-fns";
 import type { HomeData } from "./types";
 import { budgetRows, debtsFromAccounts, monthKey, simulatePayoff, splitRows, strategyMeta } from "./strategies";
-import { activeBills, billStatuses, billsInRange, currentPeriodRange, weeklyProjection, yearProjection } from "./projections";
+import { activeBills, billStatuses, billsInRange, currentPeriodRange, plannedEveryday, weeklyProjection, yearProjection } from "./projections";
 import { compare, periodFor, sameTimeLastYear } from "./insights";
 
 /**
@@ -67,7 +67,7 @@ export const SCALARS: SourceDef<ScalarResult>[] = [
   { id: "cat-limit", name: "Budget limit of a category", group: "Budget", params: cats, run: (d, _t, p) => ({ value: d.budgets.find((b) => b.id === p)?.limit ?? 0, format: "money" }) },
   { id: "acct-balance", name: "Balance of an account", group: "Accounts", params: accts, run: (d, _t, p) => ({ value: d.accounts.find((a) => a.id === p)?.balance ?? 0, format: "money" }) },
   { id: "starter-goal", name: "Starter fund goal", group: "Goals", run: (d) => ({ value: d.settings.starterFundGoal, format: "money" }) },
-  { id: "ef-goal", name: "Emergency fund goal", group: "Goals", run: (d, t) => ({ value: (sum(activeBills(d, monthKey(t)).map((b) => b.amount)) + d.settings.everydaySpend) * d.settings.emergencyMonths, format: "money" }) },
+  { id: "ef-goal", name: "Emergency fund goal", group: "Goals", run: (d, t) => ({ value: (sum(activeBills(d, monthKey(t)).map((b) => b.amount)) + plannedEveryday(d, monthKey(t))) * d.settings.emergencyMonths, format: "money" }) },
   { id: "debt-paid-ytd", name: "Debt paid down this year", group: "Debt", run: (d, t) => { const y = String(t.getFullYear()); const h = (d.balanceHistory ?? []).filter((p) => p.date < y); const ids = debtsFromAccounts(d.accounts, true).map((x) => x.id); let start = 0, any = false; for (const id of ids) { const pts = h.filter((p) => p.accountId === id).sort((a, b) => b.date.localeCompare(a.date)); if (pts[0]) { start += pts[0].balance; any = true; } } return { value: any ? start - sum(debtsFromAccounts(d.accounts, true).map((x) => x.balance)) : 0, format: "money", sub: any ? `since Jan 1` : "needs balance history" }; } },
 ];
 

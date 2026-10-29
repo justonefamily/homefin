@@ -129,6 +129,9 @@ export interface Settings {
   emergencyMonths: number; // Baby Step 3
   /** Monthly estimate of everyday spending (groceries, gas, etc.) used in projections. */
   everydaySpend: number;
+  /** What planned months are built from: "estimate" = bills + the everyday estimate above; "budget" = the budget limits
+   *  (bills are already inside their categories, so everyday = budget total − bills). */
+  planBasis?: "estimate" | "budget";
   /** How far back to pull transactions when linking a bank (days). Plaid's maximum is 730 (24 months). */
   historyDays?: number;
   /** Merchant keys the user said are "not a bill". */
