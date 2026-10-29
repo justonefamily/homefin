@@ -35,7 +35,7 @@ export function actualsByDay(data: HomeData, monthKey: string): DayActual[] {
  * every transaction with the household's decisions applied (merges, renamed, category overrides),
  * transfers / hidden / reimbursable left out, refunds as negative lines. `kind` tells bills from everyday.
  */
-export interface SpendItem { category: string; amount: number; kind: "bill" | "spend"; date: string }
+export interface SpendItem { category: string; amount: number; kind: "bill" | "spend"; date: string; /** merchant key (opens the item page) and the name to show */ key?: string; name?: string }
 export function spendItems(data: HomeData, months: string[]): SpendItem[] {
   const set = new Set(months);
   const bills = billKeyMap(data);
@@ -45,7 +45,7 @@ export function spendItems(data: HomeData, months: string[]): SpendItem[] {
     const c = classify(data, t, bills);
     if (c.kind === "ignore" || c.kind === "transfer" || c.kind === "reimbursable") continue;
     const pref = data.settings.merchants?.[c.key];
-    out.push({ category: pref?.category ?? c.bill?.category ?? t.category, amount: t.amount, kind: c.kind === "bill" ? "bill" : "spend", date: t.date });
+    out.push({ category: pref?.category ?? c.bill?.category ?? t.category, amount: t.amount, kind: c.kind === "bill" ? "bill" : "spend", date: t.date, key: c.key, name: pref?.name ?? c.bill?.name ?? t.description });
   }
   for (const e of data.income ?? []) if (e.status === "refund" && set.has(e.date.slice(0, 7))) out.push({ category: "refund", amount: -e.amount, kind: "spend", date: e.date });
   // Bills paid by hand (no bank transaction behind the payment) still count in their category.
@@ -55,7 +55,7 @@ export function spendItems(data: HomeData, months: string[]): SpendItem[] {
     const b = data.bills.find((x) => x.id === p.billId);
     if (!b) continue;
     const hasTx = data.transactions.some((t) => t.date.slice(0, 7) === p.month && classify(data, t, bills).bill?.id === b.id);
-    if (!hasTx) out.push({ category: b.category, amount: p.amount, kind: "bill", date: p.paidAt.slice(0, 10) });
+    if (!hasTx) out.push({ category: b.category, amount: p.amount, kind: "bill", date: p.paidAt.slice(0, 10), key: b.merchant, name: `${b.name} (marked paid by hand)` });
   }
   void matched;
   return out;

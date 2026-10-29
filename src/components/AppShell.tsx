@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, CalendarDays, CalendarCheck, CreditCard, Home, Settings, TrendingUp, Cloud, CloudOff, Loader2, Wallet, LayoutGrid } from "lucide-react";
+import { BarChart3, CalendarDays, CalendarCheck, CreditCard, Home, Settings, TrendingUp, Cloud, CloudOff, Loader2, Wallet, LayoutGrid, Undo2, Redo2 } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { createClient, supabaseConfigured } from "@/lib/supabase/client";
 import { SupabaseAdapter } from "@/lib/storage/supabase";
@@ -154,7 +154,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 export function SaveStatus() {
-  const { status, savedAt, error, pending, retrySave } = useHome();
+  const { status, savedAt, error, pending, retrySave, undoStack, redoStack, undo, redo } = useHome();
+  const last = undoStack[undoStack.length - 1];
+  const next = redoStack[redoStack.length - 1];
+  const history = (last || next) && (
+    <div className="flex items-center gap-2 flex-wrap mt-1">
+      {last && <button onClick={() => undo()} title={`Undo: ${last.note}`} className="inline-flex items-center gap-1 h-7 px-2 rounded-[8px] border border-line bg-card text-[11px] font-semibold text-ink hover:border-field max-w-full"><Undo2 size={12} className="shrink-0" /><span className="truncate">Undo “{last.note}”</span></button>}
+      {next && <button onClick={() => redo()} title={`Redo: ${next.note}`} className="inline-flex items-center gap-1 h-7 px-2 rounded-[8px] border border-line bg-card text-[11px] font-semibold text-muted hover:border-field"><Redo2 size={12} /> Redo</button>}
+    </div>
+  );
   // When the connection comes back (or the tab wakes up), push anything still waiting.
   useEffect(() => {
     const go = () => { if (useHome.getState().pending && useHome.getState().status === "error") void retrySave(); };
@@ -164,10 +172,10 @@ export function SaveStatus() {
     const t = setInterval(go, 30_000);
     return () => { window.removeEventListener("online", go); document.removeEventListener("visibilitychange", vis); clearInterval(t); };
   }, [retrySave]);
-  if (status === "saving") return <span className="text-muted-2">Saving…</span>;
-  if (status === "error") return <span className="text-red">Save failed: {error}{pending && <> · <button onClick={() => retrySave()} className="font-semibold underline">retry now</button></>}</span>;
-  if (savedAt) return <span className="text-muted-2">Saved {new Date(savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>;
-  return null;
+  if (status === "saving") return <span className="text-muted-2">Saving…{history}</span>;
+  if (status === "error") return <span className="text-red">Save failed: {error}{pending && <> · <button onClick={() => retrySave()} className="font-semibold underline">retry now</button></>}{history}</span>;
+  if (savedAt) return <span className="text-muted-2">Saved {new Date(savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}{history}</span>;
+  return history || null;
 }
 
 function Onboarding({ reload }: { reload: () => Promise<void> }) {

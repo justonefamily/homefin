@@ -20,7 +20,7 @@ interface HomeStore {
   setAdapter(a: StorageAdapter): Promise<void>;
   load(): Promise<void>;
   update(fn: (d: HomeData) => HomeData, note?: string): Promise<void>;
-  replace(d: HomeData, note?: string): Promise<void>;
+  replace(d: HomeData, note?: string, keepHistory?: boolean): Promise<void>;
   loadSample(): Promise<void>;
   startFresh(name: string): Promise<void>;
   refreshSnapshots(): Promise<void>;
@@ -29,7 +29,13 @@ interface HomeStore {
   pending: boolean;
   /** Try the pending save again now (also runs automatically when the connection comes back). */
   retrySave(): Promise<void>;
+  /** Steps back through changes made in this session (what each change was is in `note`). */
+  undoStack: { data: HomeData; note: string }[];
+  redoStack: { data: HomeData; note: string }[];
+  undo(): Promise<void>;
+  redo(): Promise<void>;
 }
+const UNDO_LIMIT = 50;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -53,6 +59,23 @@ export const useHome = create<HomeStore>((set, get) => ({
   status: "idle",
   onboarded: false,
   pending: false,
+  undoStack: [],
+  redoStack: [],
+
+  async undo() {
+    const { undoStack, data } = get();
+    const last = undoStack[undoStack.length - 1];
+    if (!last || !data) return;
+    set({ undoStack: undoStack.slice(0, -1), redoStack: [...get().redoStack, { data, note: last.note }].slice(-UNDO_LIMIT) });
+    await get().replace(last.data, `undo: ${last.note}`, true);
+  },
+  async redo() {
+    const { redoStack, data } = get();
+    const next = redoStack[redoStack.length - 1];
+    if (!next || !data) return;
+    set({ redoStack: redoStack.slice(0, -1), undoStack: [...get().undoStack, { data, note: next.note }].slice(-UNDO_LIMIT) });
+    await get().replace(next.data, `redo: ${next.note}`, true);
+  },
 
   async retrySave() {
     const d = get().data;
@@ -88,7 +111,8 @@ export const useHome = create<HomeStore>((set, get) => ({
     const cur = get().data;
     if (!cur) return;
     const next = fn(cur);
-    set({ data: next, status: "saving", pending: true });
+    if (next === cur) return;
+    set({ data: next, status: "saving", pending: true, undoStack: [...get().undoStack, { data: cur, note }].slice(-UNDO_LIMIT), redoStack: [] });
     pendingNote = note;
     // Debounce rapid edits into one save (and one snapshot).
     if (saveTimer) clearTimeout(saveTimer);
@@ -106,9 +130,10 @@ export const useHome = create<HomeStore>((set, get) => ({
     });
   },
 
-  async replace(d0, note = "import") {
+  async replace(d0, note = "import", keepHistory = false) {
     const d = { ...d0, setupDone: true };
-    set({ data: d, status: "saving", onboarded: true, pending: true });
+    const cur = get().data;
+    set({ data: d, status: "saving", onboarded: true, pending: true, ...(keepHistory || !cur ? {} : { undoStack: [...get().undoStack, { data: cur, note }].slice(-UNDO_LIMIT), redoStack: [] }) });
     pendingNote = note;
     try {
       await saveWithRetry(get().adapter, d, note);

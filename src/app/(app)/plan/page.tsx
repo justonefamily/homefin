@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { getDaysInMonth } from "date-fns";
 import { useHome } from "@/store/useHome";
@@ -13,6 +13,8 @@ import { uid } from "@/lib/storage/adapter";
 import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
 import { Sparkles } from "lucide-react";
 import { YearPlanView } from "@/components/YearPlanView";
+import { spendItems } from "@/lib/actuals";
+import { useItem } from "@/store/useItem";
 
 const SPLIT_COLORS = ["bg-accent", "bg-amber", "bg-teal", "bg-muted-2", "bg-ink", "bg-gold"];
 const SPLIT_HEX = ["#0e6b74", "#b45309", "#4fb3bc", "#7a8294", "#141821", "#d9a066"];
@@ -267,18 +269,51 @@ function BudgetView({ today }: { today: Date }) {
         ))}
       </Card>
       <Button variant="dashed" onClick={() => setEditing("new")}>+ Add a budget category</Button>
-      {editing && <CategoryForm cat={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={save} onDelete={remove} />}
+      {editing && <CategoryForm cat={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={save} onDelete={remove} feeding={editing === "new" ? undefined : <Feeding categoryId={editing.id} month={monthKey(today)} monthLabel={today.toLocaleString("en-US", { month: "long" })} onClose={() => setEditing(null)} />} />}
     </div>
   );
 }
 
-function CategoryForm({ cat, onClose, onSave, onDelete }: { cat?: BudgetCategory; onClose: () => void; onSave: (c: BudgetCategory) => void; onDelete: (id: string) => void }) {
+/** What's actually counted against a budget this month: every line, grouped by item, each one opening its item page. */
+function Feeding({ categoryId, month, monthLabel, onClose }: { categoryId: string; month: string; monthLabel: string; onClose: () => void }) {
+  const data = useHome((s) => s.data)!;
+  const openItem = useItem((s) => s.openItem);
+  const [open, setOpen] = useState(false);
+  const items = spendItems(data, [month]).filter((i) => i.category === categoryId);
+  const groups = new Map<string, { key?: string; name: string; total: number; count: number; kind: "bill" | "spend"; last: string }>();
+  for (const i of items) { const k = i.key ?? i.name ?? "?"; const g = groups.get(k) ?? { key: i.key, name: i.name ?? "Item", total: 0, count: 0, kind: i.kind, last: i.date }; g.total += i.amount; g.count++; if (i.date > g.last) g.last = i.date; groups.set(k, g); }
+  const rows = [...groups.values()].sort((a, b) => b.total - a.total);
+  const total = rows.reduce((s, r) => s + r.total, 0);
+  return (
+    <div className="rounded-[12px] border border-line overflow-hidden">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="w-full flex items-center gap-2 px-3 py-2 text-left bg-surface hover:bg-surface/70">
+        <div className="flex-1 text-[12px] font-semibold">What&apos;s feeding this · {monthLabel}</div>
+        <div className="text-[12px] font-bold">{money(total)}</div>
+        <span className="text-[11px] text-accent font-semibold">{open ? "hide" : `show ${rows.length}`}</span>
+      </button>
+      {open && (
+        <div className="max-h-56 overflow-y-auto">
+          {rows.length === 0 && <div className="px-3 py-3 text-[12px] text-muted">Nothing counted here yet this month.</div>}
+          {rows.map((r) => (
+            <button type="button" key={r.key ?? r.name} disabled={!r.key} onClick={() => { if (r.key) { onClose(); openItem(r.key); } }} className="w-full flex items-center gap-3 px-3 py-2 border-t border-line-soft text-left hover:bg-surface/60 disabled:cursor-default">
+              <div className="flex-1 min-w-0"><div className="text-[12px] font-semibold truncate">{r.name}</div><div className="text-[11px] text-muted">{r.kind === "bill" ? "bill" : "everyday"} · {r.count}× · last {new Date(r.last + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div></div>
+              <div className="text-[12px] font-semibold">{money(r.total)}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CategoryForm({ cat, onClose, onSave, onDelete, feeding }: { cat?: BudgetCategory; onClose: () => void; onSave: (c: BudgetCategory) => void; onDelete: (id: string) => void; feeding?: ReactNode }) {
   const [name, setName] = useState(cat?.name ?? "");
   const [limit, setLimit] = useState(cat?.limit ?? 0);
   const [bucket, setBucket] = useState<BudgetCategory["bucket"]>(cat?.bucket ?? "needs");
   const [defaultLimit, setDefaultLimit] = useState(cat?.defaultLimit ?? 0);
   return (
     <Modal open onClose={onClose} title={cat ? "Edit category" : "Add a budget category"}>
+      {feeding}
       <Field label="Name"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Groceries" /></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Monthly limit ($)"><input className={inputCls} type="number" inputMode="decimal" value={limit || ""} onChange={(e) => setLimit(Number(e.target.value))} /></Field>
