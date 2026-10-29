@@ -66,6 +66,19 @@ export function periodRangeFor(data: HomeData, anchor: Date, period: Period): Pe
   return { period: defs.length < 2 ? "a" : period, from, to, label: fmtRange(from, to), anchor: new Date(y, m, 1) };
 }
 
+/** Which pay period a calendar day (1–31) belongs to: "a" (first) or "b" (second). Single-period schedules are always "a". */
+export function periodOfDay(data: HomeData, day: number): Period {
+  const defs = periodDefs(data);
+  if (defs.length < 2) return "a";
+  const inside = (d: { from: number; to: number }) => (d.to >= d.from ? day >= d.from && day <= d.to : day >= d.from || day <= d.to);
+  return inside(defs[0]) ? "a" : "b";
+}
+/** Short label for a period definition, e.g. "30th – 14th". */
+export function periodDefLabel(d: { from: number; to: number }): string {
+  const ord = (n: number) => n >= 31 ? "end" : `${n}${[, "st", "nd", "rd"][(n % 10 > 3 || Math.floor(n % 100 / 10) === 1) ? 0 : n % 10] ?? "th"}`;
+  return `${ord(d.from)} – ${ord(d.to)}`;
+}
+
 /** The period `date` falls in — may be the "b" period that started last month. */
 export function currentPeriodRange(data: HomeData, date: Date): PeriodRange {
   const [s1, s2] = periodStarts(data);
