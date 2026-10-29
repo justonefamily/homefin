@@ -142,7 +142,7 @@ export function babySteps(data: HomeData): BabyStep[] {
 /* Budget splits (50/30/20, 6 Cans)                                    */
 /* ------------------------------------------------------------------ */
 
-export interface SplitRow { id: string; name: string; pct: number; what: string; target: number; actual: number; }
+export interface SplitRow { id: string; name: string; pct: number; what: string; target: number; actual: number;; /** which budget buckets feed this slice */ buckets: BudgetCategory["bucket"][] }
 
 const SPLITS: Record<"503020" | "sixcans", { id: string; name: string; pct: number; what: string; buckets: BudgetCategory["bucket"][] }[]> = {
   "503020": [
@@ -172,7 +172,7 @@ export function splitRows(data: HomeData, strategy: "503020" | "sixcans", month:
   const income = expectedMonthlyIncome(data);
   const actual = actualByBucket(data, month);
   return SPLITS[strategy].map((s) => ({
-    id: s.id, name: s.name, pct: s.pct, what: s.what,
+    id: s.id, name: s.name, pct: s.pct, what: s.what, buckets: s.buckets,
     target: (income * s.pct) / 100,
     actual: s.id === "ffa" ? data.settings.extraPayment : s.buckets.reduce((sum, b) => sum + actual[b], 0),
   }));

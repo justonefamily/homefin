@@ -186,11 +186,36 @@ function Sparkline({ points }: { points: number[] }) {
   );
 }
 
+/** What's behind one slice of 50/30/20 or 6 Cans: the categories in its buckets, each with this month's lines. */
+function SliceSheet({ row, month, monthLabel, onClose }: { row: ReturnType<typeof splitRows>[number]; month: string; monthLabel: string; onClose: () => void }) {
+  const data = useHome((s) => s.data)!;
+  const items = spendItems(data, [month]);
+  const cats = data.budgets.filter((b) => row.buckets.includes(b.bucket)).map((b) => ({ ...b, spent: items.filter((i) => i.category === b.id).reduce((s, i) => s + i.amount, 0) })).sort((a, b) => b.spent - a.spent);
+  const total = cats.reduce((s, c) => s + c.spent, 0);
+  const bucketName: Record<BudgetCategory["bucket"], string> = { needs: "Needs", wants: "Wants", savings: "Savings & debt", giving: "Giving", education: "Education", play: "Play", reimbursable: "Reimbursable" };
+  return (
+    <Modal open onClose={onClose} title={`${row.name} · ${monthLabel}`}>
+      <div className="text-[12px] text-muted -mt-1">{row.what}. Counts every budget category whose “Counts toward” is {row.buckets.map((b) => bucketName[b]).join(" or ")}. Target {money(row.target)} ({row.pct}% of income) · actual {money(row.actual)}.</div>
+      {row.id === "ffa" && <div className="rounded-[12px] bg-surface px-3 py-2 text-[12px]">This slice is the <b>extra toward debt</b> you set on this page ({money(data.settings.extraPayment)}/mo), not spending from the bank. Raise or lower it under Extra payment.</div>}
+      {row.id !== "ffa" && cats.length === 0 && <div className="text-[12px] text-muted">No budget category counts toward this yet. Edit a category under Plan → Budget and set “Counts toward”.</div>}
+      {row.id !== "ffa" && cats.map((c) => (
+        <div key={c.id} className="flex flex-col gap-1.5">
+          <div className="flex items-baseline justify-between text-[13px]"><div className="font-semibold">{c.name} <span className="text-[11px] font-normal text-muted">· {bucketName[c.bucket]} · limit {money(c.limit)}</span></div><div className="font-semibold">{money(c.spent)}</div></div>
+          <Feeding categoryId={c.id} month={month} monthLabel={monthLabel} onClose={onClose} />
+        </div>
+      ))}
+      {row.id !== "ffa" && cats.length > 0 && <div className="flex items-baseline justify-between text-[13px] border-t border-line pt-2"><div className="font-semibold">Total</div><div className="font-bold">{money(total)}</div></div>}
+    </Modal>
+  );
+}
+
 function SplitView() {
   const data = useHome((s) => s.data)!;
   const today = useToday();
   const rows = splitRows(data, data.settings.strategy as "503020" | "sixcans", monthKey(today));
   const income = data.pay.monthlyIncome || 1;
+  const [open, setOpen] = useState<string | null>(null);
+  const openRow = rows.find((r) => r.id === open);
   return (
     <Card className="p-4 flex flex-col gap-3">
       <Eyebrow>Target vs actual · ${fmt(data.pay.monthlyIncome)}/mo</Eyebrow>
@@ -204,14 +229,15 @@ function SplitView() {
         {rows.map((r, i) => {
           const diff = r.actual - r.target;
           return (
-            <div key={r.id} className="flex items-center gap-2.5 py-2.5 border-t border-line-soft">
+            <button key={r.id} onClick={() => setOpen(r.id)} className="flex items-center gap-2.5 py-2.5 border-t border-line-soft text-left hover:bg-surface/60 -mx-2 px-2 rounded-[8px]">
               <div className={cx("w-3 h-3 rounded-[4px]", SPLIT_COLORS[i])} />
-              <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold">{r.name} · {r.pct}%</div><div className="text-[11px] text-muted">{r.what}</div></div>
+              <div className="flex-1 min-w-0"><div className="text-[13px] font-semibold">{r.name} · {r.pct}%</div><div className="text-[11px] text-muted">{r.what} · <span className="text-accent font-semibold">what&apos;s feeding this</span></div></div>
               <div className="flex flex-col items-end gap-0.5"><div className="text-[13px] font-semibold">{money(r.actual)} / {money(r.target)}</div><div className={cx("text-[11px] font-semibold", diff > 0 ? "text-red" : "text-green")}>{diff > 0 ? `+${money(diff)} over` : `${money(-diff)} under`}</div></div>
-            </div>
+            </button>
           );
         })}
       </div>
+      {openRow && <SliceSheet row={openRow} month={monthKey(today)} monthLabel={today.toLocaleString("en-US", { month: "long" })} onClose={() => setOpen(null)} />}
     </Card>
   );
 }
