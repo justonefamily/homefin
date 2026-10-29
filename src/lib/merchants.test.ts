@@ -120,3 +120,11 @@ describe("merging two bills", () => {
     expect(next.bills.find((b) => b.id === "new")?.endedOn).toBeUndefined();
   });
 });
+
+it("never suggests a pair the user said is not the same place", () => {
+  const list = [
+    { key: "7-eleven", name: "7-Eleven", total: 10, count: 1, kind: "spend" } as never,
+    { key: "eleven labs", name: "Eleven Labs", total: 5, count: 1, kind: "spend" } as never,
+  ];
+  expect(similarMerchants(list, ["7-eleven|eleven labs"])).toHaveLength(0);
+});

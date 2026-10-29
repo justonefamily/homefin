@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, ArrowDownLeft, ArrowUpRight, Merge, Search, 
 import { addDays, addMonths, endOfMonth, getDaysInMonth, startOfMonth, startOfWeek } from "date-fns";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Segmented, cx, inputCls, money } from "./ui";
-import { flowFor, merchantSummaries, mergeMerchants, similarMerchants, txKey, type FlowLine, type MerchantSummary } from "@/lib/merchants";
+import { flowFor, merchantSummaries, mergeMerchants, pairKey, similarMerchants, txKey, type FlowLine, type MerchantSummary } from "@/lib/merchants";
 import { ItemSheet, DepositSheet } from "./ItemSheet";
 import { openFlags, removeFlag, resolveFlag, setFlagNote } from "@/lib/flags";
 import { Flag as FlagIcon, Check, Trash2 } from "lucide-react";
@@ -147,7 +147,8 @@ function MerchantsView({ today }: { today: Date }) {
   const from = span === "all" ? undefined : span === "1m" ? ymd(startOfMonth(today)) : ymd(addMonths(today, span === "3m" ? -3 : -12));
   const spanLabel = span === "1m" ? `${today.toLocaleString("en-US", { month: "long" })} so far` : span === "3m" ? "last 3 months" : span === "12m" ? "last 12 months" : "all time";
   const all = useMemo(() => merchantSummaries(data, from), [data, from]);
-  const similar = useMemo(() => similarMerchants(all), [all]);
+  const similar = useMemo(() => similarMerchants(all, data.settings.notSamePlace ?? []), [all, data.settings.notSamePlace]);
+  const notSame = (a: MerchantSummary, b: MerchantSummary) => update((h) => ({ ...h, settings: { ...h.settings, notSamePlace: [...new Set([...(h.settings.notSamePlace ?? []), pairKey(a.key, b.key)])] } }), `${a.name} and ${b.name} are different places`);
   const list = all.filter((m) => (filter === "all" ? m.kind !== "ignore" : m.kind === filter) && (!q || m.name.toLowerCase().includes(q.toLowerCase()) || m.key.includes(q.toLowerCase())));
   const total = list.filter((m) => m.kind !== "transfer").reduce((s, m) => s + m.total, 0);
   const max = Math.max(1, ...list.map((m) => m.total));
@@ -193,6 +194,7 @@ function MerchantsView({ today }: { today: Date }) {
               <div className="flex gap-1.5 shrink-0">
                 <button onClick={() => merge(b.key, a.key)} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">Keep “{a.name.slice(0, 18)}”</button>
                 <button onClick={() => merge(a.key, b.key)} className="h-8 px-2.5 rounded-[8px] bg-accent text-white text-[11px] font-semibold">Keep “{b.name.slice(0, 18)}”</button>
+                <button onClick={() => notSame(a, b)} className="h-8 px-2.5 rounded-[8px] border border-line bg-card text-[11px] font-semibold text-muted hover:text-ink">Not the same</button>
               </div>
             </div>
           ))}

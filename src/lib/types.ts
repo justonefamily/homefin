@@ -128,6 +128,8 @@ export interface Settings {
   dismissedSuggestions?: string[];
   /** Plaid account ids the user hid — sync skips them without disconnecting the bank. */
   hiddenAccounts?: string[];
+  /** Merchant pairs the user said are NOT the same place ("keyA|keyB", sorted) — never suggested again. */
+  notSamePlace?: string[];
   /** Deposit merchant keys the user said are not income sources. */
   dismissedIncome?: string[];
   /** When true, budget limits reset to last quarter's averages automatically at each quarter start. */

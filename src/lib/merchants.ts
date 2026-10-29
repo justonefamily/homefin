@@ -171,8 +171,10 @@ export function merchantSummaries(data: HomeData, from?: string, to?: string): M
 }
 
 /** Pairs of merchants that look like the same place: shared first word, or one key contains the other. */
-export function similarMerchants(list: MerchantSummary[]): [MerchantSummary, MerchantSummary][] {
+export const pairKey = (a: string, b: string) => [a, b].sort().join("|");
+export function similarMerchants(list: MerchantSummary[], notSame: string[] = []): [MerchantSummary, MerchantSummary][] {
   const pairs: [MerchantSummary, MerchantSummary][] = [];
+  const no = new Set(notSame);
   const first = (k: string) => k.split(" ")[0];
   const GENERIC = new Set(["the", "www", "sq", "tst", "pp", "amzn", "amazon", "paypal", "apple", "google", "walmart", "target", "zelle", "cash", "venmo", "money", "transfer", "payment", "online", "mobile", "interest", "authorized"]);
   // Person-to-person payments are never "the same place" as each other — different recipients are different people.
@@ -181,6 +183,7 @@ export function similarMerchants(list: MerchantSummary[]): [MerchantSummary, Mer
     const a = list[i], b = list[j];
     if (a.kind === "ignore" || b.kind === "ignore") continue;
     if (isP2P(a.key) || isP2P(b.key)) continue;
+    if (no.has(pairKey(a.key, b.key))) continue;
     const fa = first(a.key), fb = first(b.key);
     const like = (fa === fb && fa.length >= 4 && !GENERIC.has(fa)) || (a.key.length >= 5 && b.key.includes(a.key)) || (b.key.length >= 5 && a.key.includes(b.key));
     if (like) pairs.push([a, b]);
