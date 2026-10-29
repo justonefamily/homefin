@@ -59,6 +59,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         const { data: { user } } = await sb.auth.getUser();
         if (!user) { router.replace("/login"); return; }
         setUserName(user.user_metadata?.name ?? user.email ?? "you");
+        // Anyone invited by email joins their home the moment they sign in, whichever way they signed in.
+        await sb.rpc("accept_pending_invites", { p_display_name: user.user_metadata?.name ?? null }).then(() => undefined, () => undefined);
         const { data: members, error: mErr } = await sb.from("home_members").select("home_id").limit(1);
         if (mErr) { setBootError(`Couldn't read your home: ${mErr.message}`); setBooted(true); return; }
         let homeId = members?.[0]?.home_id as string | undefined;

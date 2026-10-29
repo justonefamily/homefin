@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteMail, setInviteMail] = useState<string | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const cloud = supabaseConfigured() && adapter.kind === "supabase";
@@ -36,7 +37,14 @@ export default function SettingsPage() {
     const sb = createClient();
     const { data: row, error } = await sb.from("home_invites").insert({ home_id: homeId, email, role, invited_by: (await sb.auth.getUser()).data.user?.id }).select("token").single();
     if (error) { alert(error.message); return; }
-    setInviteLink(`${location.origin}/invite?token=${row.token}`);
+    const link = `${location.origin}/invite?token=${row.token}`;
+    setInviteLink(link);
+    setInviteMail("Sending the email…");
+    try {
+      const r = await fetch("/api/invite", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, link, homeName: data.homeName }) });
+      const j = await r.json();
+      setInviteMail(j.sent ? `Email sent to ${email}.` : `No email went out — ${j.reason ?? j.error ?? "share the link instead"}.`);
+    } catch { setInviteMail("No email went out — share the link instead."); }
     loadMembers();
   };
 
@@ -140,7 +148,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {inviteOpen && <InviteModal onClose={() => { setInviteOpen(false); setInviteLink(null); }} onInvite={invite} link={inviteLink} />}
+      {inviteOpen && <InviteModal onClose={() => { setInviteOpen(false); setInviteLink(null); setInviteMail(null); }} onInvite={invite} link={inviteLink} mail={inviteMail} />}
       {payOpen && <PayModal onClose={() => setPayOpen(false)} />}
     </>
   );
@@ -152,14 +160,15 @@ const Avatar = ({ text, dashed }: { text: string; dashed?: boolean }) => (
 const Dot = ({ on }: { on?: boolean }) => <div className={cx("w-2 h-2 rounded-full shrink-0", on ? "bg-green" : "bg-field")} />;
 const Radio = ({ on }: { on?: boolean }) => <div className={cx("w-[22px] h-[22px] rounded-full border-2 flex items-center justify-center shrink-0", on ? "border-accent" : "border-field")}>{on && <div className="w-3 h-3 rounded-full bg-accent" />}</div>;
 
-function InviteModal({ onClose, onInvite, link }: { onClose: () => void; onInvite: (email: string, role: "editor" | "viewer") => Promise<void>; link: string | null }) {
+function InviteModal({ onClose, onInvite, link, mail }: { onClose: () => void; onInvite: (email: string, role: "editor" | "viewer") => Promise<void>; link: string | null; mail: string | null }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"editor" | "viewer">("editor");
   return (
     <Modal open onClose={onClose} title="Invite to your home">
       {link ? (
         <>
-          <div className="text-sm text-muted">Send this link to {email || "them"}. It works once and signs them straight into this home.</div>
+          <div className={cx("text-[12px] rounded-[10px] px-3 py-2", mail?.startsWith("Email sent") ? "bg-green/10 text-green" : "bg-amber-bg text-amber")}>{mail ?? "…"}</div>
+          <div className="text-sm text-muted">Either way: when <b>{email}</b> signs in — Google or email — they join this home automatically. Or send them this link; it works once.</div>
           <input readOnly className={inputCls} value={link} onFocus={(e) => e.target.select()} />
           <Button onClick={() => navigator.clipboard?.writeText(link)}>Copy link</Button>
         </>
