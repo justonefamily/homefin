@@ -264,7 +264,7 @@ function BudgetView({ today }: { today: Date }) {
       <div className="grid grid-cols-3 gap-2.5 md:max-w-xl">
         <Stat dark label="Budgeted" value={money(total)} />
         <Stat label={`Spent (${today.toLocaleString("en-US", { month: "short" })})`} value={money(spent)} />
-        <Stat label="Remaining" value={money(total - spent)} tone={total - spent < 0 ? "red" : "green"} />
+        <Stat label="Remaining" value={money(total - spent)} tone={total - spent < 0 ? "red" : spent / Math.max(1, total) > pace / 100 + 0.03 ? "amber" : "green"} sub={total > 0 ? `${Math.round((spent / total) * 100)}% of budget${spent > total ? " · over" : ` · day ${today.getDate()} pace ${pace}%`}` : undefined} />
       </div>
       <div className="text-xs text-muted">Day {today.getDate()} of {dim} · you should be at about {pace}% of each budget (the dark marker).</div>
 

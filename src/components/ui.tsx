@@ -22,10 +22,11 @@ export const Eyebrow = ({ children, className }: { children: ReactNode; classNam
   <div className={cx("text-[11px] font-bold uppercase tracking-[0.06em] text-muted", className)}>{children}</div>
 );
 
-export const Stat = ({ label, value, tone, dark }: { label: string; value: string; tone?: "green" | "red" | "amber" | "teal"; dark?: boolean }) => (
+export const Stat = ({ label, value, tone, dark, sub }: { label: string; value: string; tone?: "green" | "red" | "amber" | "teal"; dark?: boolean; /** small callout under the value, in the same tone */ sub?: string }) => (
   <div className={cx("rounded-[14px] border p-3 flex flex-col gap-0.5 min-w-0", dark ? "bg-ink border-ink text-white" : "bg-card border-line")}>
     <div className={cx("text-[11px]", dark ? "text-muted-3" : "text-muted")}>{label}</div>
     <div className={cx("text-[17px] font-bold truncate", tone === "green" && "text-green", tone === "red" && "text-red", tone === "amber" && "text-amber", tone === "teal" && "text-teal")}>{value}</div>
+    {sub && <div className={cx("text-[11px] font-semibold rounded-[6px] px-1.5 py-0.5 self-start", tone === "red" ? "bg-red/10 text-red" : tone === "amber" ? "bg-amber-bg text-amber" : tone === "green" ? "bg-green/10 text-green" : "bg-surface text-muted")}>{sub}</div>}
   </div>
 );
 
