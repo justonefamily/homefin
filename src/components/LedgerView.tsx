@@ -5,6 +5,8 @@ import { Search, ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight } from "
 import { useHome } from "@/store/useHome";
 import { Card, Segmented, cx, inputCls, money, selectCls } from "./ui";
 import { ItemSheet, DepositSheet } from "./ItemSheet";
+import { merchantSummaries, moveTransaction, setMerchantPref, setPaymentDestination } from "@/lib/merchants";
+import { CheckSquare, Square, X } from "lucide-react";
 import { ledgerEntries, ledgerKindLabel, ledgerTotals, type LedgerEntry } from "@/lib/ledger";
 import { ymd } from "@/lib/calendar";
 import { currentPeriodRange, shiftPeriod } from "@/lib/projections";
@@ -12,11 +14,12 @@ import type { IncomeEvent } from "@/lib/types";
 
 type Span = "month" | "period" | "3m" | "12m" | "all" | "custom";
 
-const day = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+const day = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 const dayLong = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
 export function LedgerView({ today }: { today: Date }) {
   const data = useHome((s) => s.data)!;
+  const update = useHome((s) => s.update);
   const [span, setSpan] = useState<Span>("month");
   const [offset, setOffset] = useState(0);
   const [custom, setCustom] = useState<{ from: string; to: string }>({ from: ymd(startOfMonth(today)), to: ymd(today) });
@@ -41,6 +44,35 @@ export function LedgerView({ today }: { today: Date }) {
   const accounts = [...data.accounts].sort((a, b) => `${a.institution} ${a.name}`.localeCompare(`${b.institution} ${b.name}`));
   const acctLabel = (id?: string) => { const a = id ? data.accounts.find((x) => x.id === id) : undefined; return a ? `${a.institution} · ${a.name}${a.mask ? ` ···${a.mask}` : ""}` : id === undefined ? "Manual" : "Removed account"; };
   const steppable = span === "month" || span === "period";
+  // Select mode: pick lines (or all filtered lines) and act on them together — tag where they went, or group them under one item.
+  const [selecting, setSelecting] = useState(false);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [action, setAction] = useState<null | "dest" | "move">(null);
+  const [moveQ, setMoveQ] = useState("");
+  const selectable = (r: LedgerEntry) => r.direction === "out" && r.kind !== "payment-received";
+  const selectableRows = rows.filter(selectable);
+  const selected = selectableRows.filter((r) => sel.has(r.id));
+  const toggle = (id: string) => setSel((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const allSelected = selectableRows.length > 0 && selectableRows.every((r) => sel.has(r.id));
+  const exitSelect = () => { setSelecting(false); setSel(new Set()); setAction(null); setMoveQ(""); };
+  const liabilities = data.accounts.filter((a) => a.kind === "credit" || a.kind === "loan" || a.kind === "mortgage").sort((a, b) => `${a.institution} ${a.name}`.localeCompare(`${b.institution} ${b.name}`));
+  const merchants = useMemo(() => merchantSummaries(data).filter((m) => m.kind !== "ignore"), [data]);
+  const selTotal = selected.reduce((s, r) => s + Math.abs(r.amount), 0);
+  const applyDest = (accountId: string) => {
+    const l = data.accounts.find((a) => a.id === accountId);
+    update((h) => selected.reduce((acc, r) => setPaymentDestination(acc, r.id, accountId), h), `${selected.length} payments → ${l?.name ?? "account"}`);
+    exitSelect();
+  };
+  const applyMove = (key: string, name: string) => {
+    update((h) => selected.reduce((acc, r) => moveTransaction(acc, r.id, key), h), `moved ${selected.length} lines to ${name}`);
+    exitSelect();
+  };
+  const applyNewGroup = () => {
+    const name = moveQ.trim(); if (!name) return;
+    const key = "group:" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+    update((h) => setMerchantPref(selected.reduce((acc, r) => moveTransaction(acc, r.id, key), h), key, { name }), `grouped ${selected.length} lines as ${name}`);
+    exitSelect();
+  };
   // A loan/card picked before any sync has collected its credits: offer the sync right here.
   const picked = data.accounts.find((a) => a.id === accountId);
   const needsSync = !!picked && picked.source === "plaid" && (picked.kind === "credit" || picked.kind === "loan" || picked.kind === "mortgage") && !data.settings.creditsBackfilledAt;
@@ -104,6 +136,45 @@ export function LedgerView({ today }: { today: Date }) {
       )}
 
       {rows.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {!selecting ? (
+            <button onClick={() => setSelecting(true)} className="h-9 px-3 rounded-[10px] border border-line bg-card text-[12px] font-semibold hover:border-field inline-flex items-center gap-1.5"><CheckSquare size={14} /> Select lines</button>
+          ) : (
+            <>
+              <button onClick={() => setSel(allSelected ? new Set() : new Set(selectableRows.map((r) => r.id)))} className="h-9 px-3 rounded-[10px] border border-line bg-card text-[12px] font-semibold hover:border-field">{allSelected ? "Clear all" : `Select all ${selectableRows.length}`}</button>
+              <div className="text-[12px] text-muted">{selected.length} selected{selected.length ? ` · ${money(selTotal)}` : ""}{rows.length !== selectableRows.length ? " · deposits and payments received can't be selected" : ""}</div>
+              <button onClick={exitSelect} aria-label="Done selecting" className="ml-auto h-9 w-9 rounded-[10px] border border-line bg-card flex items-center justify-center hover:border-field"><X size={14} /></button>
+            </>
+          )}
+        </div>
+      )}
+      {selecting && selected.length > 0 && (
+        <Card className="p-3 flex flex-col gap-2 border-accent-line bg-accent-bg/40">
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setAction(action === "dest" ? null : "dest")} className={cx("h-9 px-3 rounded-[10px] text-[12px] font-semibold border", action === "dest" ? "bg-ink text-white border-ink" : "bg-card border-line hover:border-field")}>These are payments toward…</button>
+            <button onClick={() => setAction(action === "move" ? null : "move")} className={cx("h-9 px-3 rounded-[10px] text-[12px] font-semibold border", action === "move" ? "bg-ink text-white border-ink" : "bg-card border-line hover:border-field")}>Group these under one item…</button>
+          </div>
+          {action === "dest" && (
+            <div className="flex flex-col gap-1.5 text-[12px]">
+              <div className="text-muted">Pick the loan or card these {selected.length} payments went to. Set by hand, so a sync won&apos;t change it.</div>
+              <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                {liabilities.map((l) => <button key={l.id} onClick={() => applyDest(l.id)} className="text-left px-3 py-2 rounded-[8px] border border-line bg-card hover:border-field"><b>{l.institution}</b> · {l.name}{l.mask ? <span className="text-muted"> ···{l.mask}</span> : null}</button>)}
+                {liabilities.length === 0 && <div className="text-muted">No loan or card accounts yet — add one under Accounts first.</div>}
+              </div>
+            </div>
+          )}
+          {action === "move" && (
+            <div className="flex flex-col gap-1.5 text-[12px]">
+              <div className="text-muted">Move these {selected.length} lines under an existing item, or type a new name to make one.</div>
+              <div className="flex gap-2"><input autoFocus className={cx(inputCls, "h-9 text-[12px]")} placeholder="Search items, or type a new group name…" value={moveQ} onChange={(e) => setMoveQ(e.target.value)} />{moveQ.trim() && <button onClick={applyNewGroup} className="h-9 px-3 rounded-[10px] bg-accent text-white text-[12px] font-semibold whitespace-nowrap">New: “{moveQ.trim().slice(0, 20)}”</button>}</div>
+              {moveQ && <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                {merchants.filter((m) => m.name.toLowerCase().includes(moveQ.toLowerCase()) || m.key.includes(moveQ.toLowerCase())).slice(0, 10).map((m) => <button key={m.key} onClick={() => applyMove(m.key, m.name)} className="text-left px-3 py-1.5 rounded-[8px] border border-line bg-card hover:border-field"><b>{m.name}</b> <span className="text-muted">· {m.count}× · {money(m.total)}</span></button>)}
+              </div>}
+            </div>
+          )}
+        </Card>
+      )}
+      {rows.length > 0 && (
         <Card className="overflow-hidden">
           <div className="hidden md:grid grid-cols-[7.5rem_1.4fr_1.2fr_1fr_6.5rem] gap-3 px-4 py-2 text-[11px] font-semibold text-muted bg-surface border-b border-line">
             <div>Date</div><div>Item</div><div>Merchant / account</div><div>On account</div><div className="text-right">Amount</div>
@@ -122,7 +193,9 @@ export function LedgerView({ today }: { today: Date }) {
                   const amt = <span className={cx("font-bold", r.amount >= 0 ? "text-green" : "text-red")}>{r.amount >= 0 ? "+" : "−"}{money(Math.abs(r.amount))}</span>;
                   const other = r.counterpart ? <span className="text-ink">{r.direction === "out" ? "→ " : "← "}{r.counterpart}</span> : <span className="text-muted">{r.kind === "transfer" ? "—" : r.item}</span>;
                   return (
-                    <button key={r.id} onClick={() => r.open && setPick(r.open)} className={cx("w-full text-left border-b border-line-soft last:border-b-0 hover:bg-surface/60", dim && "opacity-60", !r.open && "cursor-default")}>
+                    <button key={r.id} onClick={() => { if (selecting) { if (selectable(r)) toggle(r.id); } else if (r.open) setPick(r.open); }} className={cx("w-full text-left border-b border-line-soft last:border-b-0 hover:bg-surface/60 flex items-stretch", dim && "opacity-60", !r.open && !selecting && "cursor-default", selecting && sel.has(r.id) && "bg-accent-bg/50", selecting && !selectable(r) && "opacity-50")}>
+                      {selecting && <div className="pl-3 pt-3 shrink-0 text-accent">{selectable(r) ? (sel.has(r.id) ? <CheckSquare size={16} /> : <Square size={16} className="text-muted-3" />) : <Square size={16} className="text-line" />}</div>}
+                      <div className="flex-1 min-w-0">
                       {/* Desktop: one row per line */}
                       <div className="hidden md:grid grid-cols-[7.5rem_1.4fr_1.2fr_1fr_6.5rem] gap-3 px-4 py-2.5 items-start">
                         <div className="text-[12px] text-muted">{day(r.date)}</div>
@@ -137,6 +210,7 @@ export function LedgerView({ today }: { today: Date }) {
                         {r.description !== r.item && <div className="text-[11px] text-muted truncate">{r.description}</div>}
                         <div className="text-[11px] text-muted truncate">{r.counterpart ? `${r.direction === "out" ? "→" : "←"} ${r.counterpart} · ` : ""}{acctLabel(r.accountId)}</div>
                         <div className="flex flex-wrap gap-1 mt-0.5">{badge}{extras}</div>
+                      </div>
                       </div>
                     </button>
                   );
