@@ -184,14 +184,20 @@ export function splitRows(data: HomeData, strategy: "503020" | "sixcans", month:
 
 export interface BudgetRow { id: string; name: string; limit: number; spent: number; pct: number; state: "over" | "ahead" | "ok"; /** spent − limit: positive = over */ over: number; ratio: number }
 
-export function budgetRows(data: HomeData, month: string, dayOfMonth: number, daysInMonth: number): BudgetRow[] {
-  const pace = dayOfMonth / daysInMonth;
-  const items = spendItems(data, [month]);
+/**
+ * Budget vs actual. `month` may be one month or several (a year); `limitMonths` scales the monthly limit to the window
+ * (12 for a full year, the months elapsed for this year). `pace` is how far through the window we are, 0–1.
+ */
+export function budgetRows(data: HomeData, month: string | string[], dayOfMonth: number, daysInMonth: number, limitMonths = 1): BudgetRow[] {
+  const months = Array.isArray(month) ? month : [month];
+  const pace = Array.isArray(month) ? (Math.max(0, months.length - 1) + dayOfMonth / daysInMonth) / Math.max(1, limitMonths) : dayOfMonth / daysInMonth;
+  const items = spendItems(data, months);
   const rows: BudgetRow[] = data.budgets.map((c) => {
+    const limit = c.limit * limitMonths;
     const spent = items.filter((i) => i.category === c.id).reduce((s, i) => s + i.amount, 0);
-    const ratio = c.limit ? spent / c.limit : 0;
-    const state: BudgetRow["state"] = spent > c.limit ? "over" : spent < c.limit && ratio > pace + 0.03 ? "ahead" : "ok";
-    return { id: c.id, name: c.name, limit: c.limit, spent, pct: Math.min(100, Math.round(ratio * 100)), state, over: spent - c.limit, ratio };
+    const ratio = limit ? spent / limit : 0;
+    const state: BudgetRow["state"] = spent > limit ? "over" : spent < limit && ratio > pace + 0.03 ? "ahead" : "ok";
+    return { id: c.id, name: c.name, limit, spent, pct: Math.min(100, Math.round(ratio * 100)), state, over: spent - limit, ratio };
   });
   // Most over budget first, then by how far along the budget is, so the list re-orders itself as spending lands.
   return rows.sort((a, b) => (b.over - a.over) || (b.ratio - a.ratio) || a.name.localeCompare(b.name));

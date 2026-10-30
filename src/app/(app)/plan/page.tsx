@@ -11,9 +11,10 @@ import { STRATEGIES, babySteps, budgetRows, debtsFromAccounts, monthKey, simulat
 import type { BudgetCategory, StrategyId } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
 import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
-import { Sparkles } from "lucide-react";
+import { Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import { YearPlanView } from "@/components/YearPlanView";
-import { spendItems } from "@/lib/actuals";
+import { actualsForMonth, spendItems } from "@/lib/actuals";
+import { expectedMonthlyIncome } from "@/lib/detect";
 import { useItem } from "@/store/useItem";
 
 const SPLIT_COLORS = ["bg-accent", "bg-amber", "bg-teal", "bg-muted-2", "bg-ink", "bg-gold"];
@@ -245,11 +246,31 @@ function SplitView() {
 function BudgetView({ today }: { today: Date }) {
   const { data: d, update } = useHome();
   const data = d!;
-  const dim = getDaysInMonth(today);
-  const rows = budgetRows(data, monthKey(today), today.getDate(), dim);
+  // Step through months or whole years to see how the current budget stacks against earlier periods.
+  const [scale, setScale] = useState<"month" | "year">("month");
+  const [offset, setOffset] = useState(0);
+  const anchor = scale === "month" ? new Date(today.getFullYear(), today.getMonth() + offset, 1) : new Date(today.getFullYear() + offset, 0, 1);
+  const isCurrent = offset === 0;
+  const monthsOf = (y: number) => Array.from({ length: y === today.getFullYear() ? today.getMonth() + 1 : 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`);
+  const window_ = scale === "month" ? [monthKey(anchor)] : monthsOf(anchor.getFullYear());
+  const limitMonths = scale === "month" ? 1 : window_.length;
+  // "Day of" the window: today for the current period, the end for past ones.
+  const dimAnchor = getDaysInMonth(scale === "month" ? anchor : new Date(anchor.getFullYear(), window_.length - 1, 1));
+  const dayOf = isCurrent ? today.getDate() : dimAnchor;
+  const dim = dimAnchor;
+  const rows = budgetRows(data, scale === "month" ? window_[0] : window_, dayOf, dim, limitMonths);
   const total = rows.reduce((s, r) => s + r.limit, 0);
   const spent = rows.reduce((s, r) => s + r.spent, 0);
-  const pace = Math.round((today.getDate() / dim) * 100);
+  const pace = isCurrent ? Math.round((scale === "month" ? today.getDate() / dim : (today.getMonth() + today.getDate() / dim) / limitMonths) * 100) : 100;
+  const label = scale === "month" ? anchor.toLocaleString("en-US", { month: "long", year: "numeric" }) : String(anchor.getFullYear());
+  const periodLabel = scale === "month" ? anchor.toLocaleString("en-US", { month: "short" }) : label;
+  const hasHistory = data.transactions.some((t) => window_.includes(t.date.slice(0, 7)));
+  // Did the money actually come in for this window? Counted deposits in the period vs what's budgeted for it.
+  const incomeIn = window_.reduce((s, m) => s + actualsForMonth(data, m).income, 0);
+  const expectedIn = expectedMonthlyIncome(data) * limitMonths;
+  const incomeGap = total - incomeIn;
+  const incomeTone: "red" | "amber" | "green" = incomeGap > 0 && (!isCurrent || pace >= 100 || total > expectedIn) ? "red" : incomeGap > 0 ? "amber" : "green";
+  const incomeSub = incomeGap > 0 ? `budget is ${money(incomeGap)} more than came in${isCurrent && total > expectedIn ? ` · ${money(total - expectedIn)} over expected` : isCurrent ? " so far" : ""}` : `covers the budget · ${money(-incomeGap)} to spare`;
   const [editing, setEditing] = useState<BudgetCategory | "new" | null>(null);
   const recs = recommendBudgets(data, today);
   const actionable = recs.filter((r) => r.basis !== "none" && Math.round(r.recommended) !== Math.round(r.current));
@@ -261,14 +282,25 @@ function BudgetView({ today }: { today: Date }) {
   const remove = (id: string) => update((h) => ({ ...h, budgets: h.budgets.filter((b) => b.id !== id) }), "deleted budget category");
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-3 gap-2.5 md:max-w-xl">
-        <Stat dark label="Budgeted" value={money(total)} />
-        <Stat label={`Spent (${today.toLocaleString("en-US", { month: "short" })})`} value={money(spent)} />
-        <Stat label="Remaining" value={money(total - spent)} tone={total - spent < 0 ? "red" : spent / Math.max(1, total) > pace / 100 + 0.03 ? "amber" : "green"} sub={total > 0 ? `${Math.round((spent / total) * 100)}% of budget${spent > total ? " · over" : ` · day ${today.getDate()} pace ${pace}%`}` : undefined} />
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-1">
+          <button onClick={() => setOffset(offset - 1)} aria-label="Earlier" className="w-10 h-10 rounded-[10px] border border-line bg-card flex items-center justify-center hover:border-field"><ChevronLeft size={16} /></button>
+          <button onClick={() => setOffset(0)} className={cx("h-10 px-3 rounded-[10px] border text-[13px] font-semibold", isCurrent ? "bg-ink text-white border-ink" : "bg-card border-line hover:border-field")}>{label}</button>
+          <button onClick={() => setOffset(offset + 1)} disabled={isCurrent} aria-label="Later" className="w-10 h-10 rounded-[10px] border border-line bg-card flex items-center justify-center hover:border-field disabled:opacity-40"><ChevronRight size={16} /></button>
+        </div>
+        <div className="w-44"><Segmented size="sm" value={scale} onChange={(s) => { setScale(s); setOffset(0); }} options={[{ id: "month", label: "Month" }, { id: "year", label: "Year" }]} /></div>
       </div>
-      <div className="text-xs text-muted">Day {today.getDate()} of {dim} · you should be at about {pace}% of each budget (the dark marker).</div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:max-w-3xl">
+        <Stat dark label={scale === "year" ? `Budgeted · ${limitMonths} mo` : "Budgeted"} value={money(total)} />
+        <Stat label={`Income received (${periodLabel})`} value={money(incomeIn)} tone={incomeTone} sub={incomeSub} />
+        <Stat label={`Spent (${periodLabel})`} value={money(spent)} />
+        <Stat label={isCurrent ? "Remaining" : "Ended"} value={money(total - spent)} tone={total - spent < 0 ? "red" : spent / Math.max(1, total) > pace / 100 + 0.03 ? "amber" : "green"} sub={total > 0 ? `${Math.round((spent / total) * 100)}% of budget${spent > total ? " · over" : isCurrent ? ` · pace ${pace}%` : " · under"}` : undefined} />
+      </div>
+      {!isCurrent && <div className="text-xs text-muted">Showing {label} against <b>today&apos;s</b> limits{scale === "year" ? ` × ${limitMonths} months` : ""} — the budget doesn&apos;t keep a history of its own, so this is how that period would have stacked up under the current budget.{hasHistory ? "" : " No bank activity recorded for this period."}</div>}
+      {isCurrent && scale === "month" && <div className="text-xs text-muted">Day {today.getDate()} of {dim} · you should be at about {pace}% of each budget (the dark marker).</div>}
+      {isCurrent && scale === "year" && <div className="text-xs text-muted">{limitMonths} month{limitMonths === 1 ? "" : "s"} into {label} · limits × {limitMonths} · you should be at about {pace}% (the dark marker).</div>}
 
-      {recs.length > 0 && (
+      {isCurrent && scale === "month" && recs.length > 0 && (
         <Card className="p-4 flex flex-col gap-2.5 border-accent-line bg-accent-bg/40">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2"><Sparkles size={16} className="text-accent" /><div className="text-sm font-semibold">Recommended for {thisQ}</div><div className="text-xs text-muted">· based on your {recs[0].quarter} averages</div></div>
@@ -295,17 +327,17 @@ function BudgetView({ today }: { today: Date }) {
         ))}
       </Card>
       <Button variant="dashed" onClick={() => setEditing("new")}>+ Add a budget category</Button>
-      {editing && <CategoryForm cat={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={save} onDelete={remove} feeding={editing === "new" ? undefined : <Feeding categoryId={editing.id} month={monthKey(today)} monthLabel={today.toLocaleString("en-US", { month: "long" })} onClose={() => setEditing(null)} />} />}
+      {editing && <CategoryForm cat={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={save} onDelete={remove} feeding={editing === "new" ? undefined : <Feeding categoryId={editing.id} month={scale === "month" ? window_[0] : window_} monthLabel={label} onClose={() => setEditing(null)} />} />}
     </div>
   );
 }
 
 /** What's actually counted against a budget this month: every line, grouped by item, each one opening its item page. */
-function Feeding({ categoryId, month, monthLabel, onClose }: { categoryId: string; month: string; monthLabel: string; onClose: () => void }) {
+function Feeding({ categoryId, month, monthLabel, onClose }: { categoryId: string; month: string | string[]; monthLabel: string; onClose: () => void }) {
   const data = useHome((s) => s.data)!;
   const openItem = useItem((s) => s.openItem);
   const [open, setOpen] = useState(false);
-  const items = spendItems(data, [month]).filter((i) => i.category === categoryId);
+  const items = spendItems(data, Array.isArray(month) ? month : [month]).filter((i) => i.category === categoryId);
   const groups = new Map<string, { key?: string; name: string; total: number; count: number; kind: "bill" | "spend"; last: string }>();
   for (const i of items) { const k = i.key ?? i.name ?? "?"; const g = groups.get(k) ?? { key: i.key, name: i.name ?? "Item", total: 0, count: 0, kind: i.kind, last: i.date }; g.total += i.amount; g.count++; if (i.date > g.last) g.last = i.date; groups.set(k, g); }
   const rows = [...groups.values()].sort((a, b) => b.total - a.total);
