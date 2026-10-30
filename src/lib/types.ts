@@ -124,6 +124,9 @@ export interface PaySchedule {
   /** Explicit pay periods ("custom"): each paycheck and the days it covers. `to` smaller than `from` means it runs into the next month
    *  (paid the 30th, covers 30 → 14 = the 30th through the 14th of next month). */
   periods?: { payDay: number; from: number; to: number }[];
+  /** Income landing on or after this day of the month counts toward the NEXT month (a Sep 30 check pays for October).
+   *  Unset = income belongs to the calendar month it landed in. */
+  incomeRollDay?: number;
 }
 
 export interface Settings {

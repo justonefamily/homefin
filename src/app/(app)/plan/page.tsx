@@ -246,6 +246,7 @@ function SplitView() {
   );
 }
 
+const ordSuffix = (n: number) => (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th");
 const h0 = (data: { budgets: { id: string; name: string }[] }, id: string) => data.budgets.find((b) => b.id === id)?.name ?? "category";
 
 function BudgetView({ today }: { today: Date }) {
@@ -318,7 +319,7 @@ function BudgetView({ today }: { today: Date }) {
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:max-w-3xl">
         <Stat dark label={scale === "year" ? `Budgeted · ${limitMonths} mo` : "Budgeted"} value={money(total)} />
-        <Stat label={`Income received (${periodLabel})`} value={money(incomeIn)} tone={incomeTone} sub={incomeSub} />
+        <Stat label={`Income for ${periodLabel}${data.pay.incomeRollDay ? ` · from the ${data.pay.incomeRollDay}${ordSuffix(data.pay.incomeRollDay)} before` : ""}`} value={money(incomeIn)} tone={incomeTone} sub={incomeSub} />
         <Stat label={`Spent (${periodLabel})`} value={money(spent)} />
         <Stat label={isCurrent ? "Remaining" : "Ended"} value={money(total - spent)} tone={total - spent < 0 ? "red" : spent / Math.max(1, total) > pace / 100 + 0.03 ? "amber" : "green"} sub={total > 0 ? `${Math.round((spent / total) * 100)}% of budget${spent > total ? " · over" : isCurrent ? ` · pace ${pace}%` : " · under"}` : undefined} />
       </div>

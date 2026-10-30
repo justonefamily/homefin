@@ -190,6 +190,7 @@ function PayModal({ onClose }: { onClose: () => void }) {
   const [days, setDays] = useState(data.pay.payDays.join(", "));
   const [split, setSplit] = useState(data.pay.splitDay);
   const [mode, setMode] = useState<"halves" | "paydays" | "custom">(data.pay.periodMode ?? "halves");
+  const [rollDay, setRollDay] = useState<number>(data.pay.incomeRollDay ?? 0);
   const [periods, setPeriods] = useState<{ payDay: number; from: number; to: number }[]>(data.pay.periods?.length ? data.pay.periods : (data.pay.payDays.length >= 2 ? [{ payDay: data.pay.payDays[0], from: data.pay.payDays[0], to: data.pay.payDays[1] - 1 }, { payDay: data.pay.payDays[1], from: data.pay.payDays[1], to: data.pay.payDays[0] - 1 || 31 }] : [{ payDay: data.pay.payDays[0] ?? 1, from: data.pay.payDays[0] ?? 1, to: 31 }]));
   const setP = (i: number, patch: Partial<{ payDay: number; from: number; to: number }>) => setPeriods(periods.map((p, j) => (j === i ? { ...p, ...patch } : p)));
   const dayWord = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
@@ -219,8 +220,9 @@ function PayModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       )}
+      <Field label="Income after this day counts toward next month" hint="A paycheck on the 30th pays for next month's first period, so it should count there. 0 = income stays in the month it landed."><input className={inputCls} type="number" min={0} max={31} value={rollDay || ""} placeholder="e.g. 25" onChange={(e) => setRollDay(Number(e.target.value) || 0)} /></Field>
       {mode === "halves" && <Field label="Split day" hint="Bills on or before this day belong to the first half."><input className={inputCls} type="number" min={1} max={28} value={split} onChange={(e) => setSplit(Number(e.target.value))} /></Field>}
-      <Button onClick={() => { const payDays = days.split(/[,\s]+/).map(Number).filter((n) => n >= 1 && n <= 31); update((h) => ({ ...h, pay: { monthlyIncome: income, payDays: mode === "custom" ? periods.map((p) => p.payDay) : payDays.length ? payDays : [1], splitDay: Math.max(1, Math.min(28, split)), periodMode: mode, periods: mode === "custom" ? periods : h.pay.periods } }), "updated pay schedule"); onClose(); }}>Save</Button>
+      <Button onClick={() => { const payDays = days.split(/[,\s]+/).map(Number).filter((n) => n >= 1 && n <= 31); update((h) => ({ ...h, pay: { monthlyIncome: income, payDays: mode === "custom" ? periods.map((p) => p.payDay) : payDays.length ? payDays : [1], splitDay: Math.max(1, Math.min(28, split)), periodMode: mode, periods: mode === "custom" ? periods : h.pay.periods, incomeRollDay: rollDay || undefined } }), "updated pay schedule"); onClose(); }}>Save</Button>
     </Modal>
   );
 }

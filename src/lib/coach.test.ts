@@ -26,3 +26,15 @@ it("says where to pull from when wants + landmarks + debt extra don't fit the pa
   if (c.gap > 0) expect(c.actions.some((a) => a.kind === "cut" || a.kind === "hold" || a.kind === "pause" || a.kind === "note")).toBe(true);
   expect(c.actions.some((a) => a.kind === "set-aside")).toBe(true);
 });
+
+it("rolls late-month paychecks into the next month's income", async () => {
+  const { incomeMonthOf, actualsForMonth } = await import("./actuals");
+  const h = emptyHome("t");
+  h.pay = { ...h.pay, incomeRollDay: 25 };
+  h.income = [{ id: "a", date: "2026-09-30", amount: 5000, source: "PAYROLL" }, { id: "b", date: "2026-10-15", amount: 5000, source: "PAYROLL" }, { id: "c", date: "2026-10-30", amount: 5000, source: "PAYROLL" }];
+  expect(incomeMonthOf(h, "2026-09-30")).toBe("2026-10");
+  expect(incomeMonthOf(h, "2026-10-15")).toBe("2026-10");
+  expect(actualsForMonth(h, "2026-10").income).toBe(10000);
+  expect(actualsForMonth(h, "2026-11").income).toBe(5000);
+  expect(actualsForMonth(h, "2026-09").income).toBe(0);
+});
