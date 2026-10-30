@@ -14,7 +14,7 @@ import { ymd } from "./calendar";
  */
 
 export interface CoachLine { category: BudgetCategory; allowance: number; spent: number; left: number; overMonth: number; flexible: boolean }
-export interface CoachAction { kind: "cut" | "hold" | "pause" | "surplus" | "set-aside" | "over" | "note"; title: string; detail: string; amount?: number; href?: string }
+export interface CoachAction { kind: "cut" | "hold" | "pause" | "surplus" | "set-aside" | "over" | "note"; /** stable key for the move within a period (what it's about, not the numbers) */ ref: string; title: string; detail: string; amount?: number; href?: string }
 export interface CoachLandmark { landmark: Landmark; periodsAway: number; perPeriod: number }
 export interface PeriodCoach {
   period: PeriodRange;
@@ -95,7 +95,7 @@ export function periodCoach(data: HomeData, today: Date, period: PeriodRange): P
 
   // 1) Anything already over budget this month is the first thing to stop — whatever the gap.
   for (const l of lines.filter((x) => x.overMonth > 0).sort((a, b) => b.overMonth - a.overMonth)) {
-    actions.push({ kind: "over", title: `${l.category.name} is ${money(l.overMonth)} over for ${today.toLocaleString("en-US", { month: "long" })}`, detail: l.flexible ? "Nothing more here this period — every dollar now comes out of a landmark or the debt plan." : "A need, so it can't just stop — but it's worth a look at what's in it.", amount: l.overMonth, href: "/plan?view=budget" });
+    actions.push({ kind: "over", ref: `over:${l.category.id}`, title: `${l.category.name} is ${money(l.overMonth)} over for ${today.toLocaleString("en-US", { month: "long" })}`, detail: l.flexible ? "Nothing more here this period — every dollar now comes out of a landmark or the debt plan." : "A need, so it can't just stop — but it's worth a look at what's in it.", amount: l.overMonth, href: "/plan?view=budget" });
   }
 
   if (gap > 0) {
@@ -105,7 +105,7 @@ export function periodCoach(data: HomeData, today: Date, period: PeriodRange): P
       if (need <= 0) break;
       const cut = Math.min(l.left, need);
       need -= cut;
-      actions.push({ kind: cut >= l.left - 1 ? "hold" : "cut", title: cut >= l.left - 1 ? `Hold ${l.category.name} where it is — ${money(l.spent)} spent, nothing more this period` : `Keep ${l.category.name} to ${money(l.spent + (l.left - cut))} this period (budget allows ${money(l.allowance)})`, detail: `Frees ${money(cut)}.`, amount: cut, href: "/money#everyday" });
+      actions.push({ kind: cut >= l.left - 1 ? "hold" : "cut", ref: `trim:${l.category.id}`, title: cut >= l.left - 1 ? `Hold ${l.category.name} where it is — ${money(l.spent)} spent, nothing more this period` : `Keep ${l.category.name} to ${money(l.spent + (l.left - cut))} this period (budget allows ${money(l.allowance)})`, detail: `Frees ${money(cut)}.`, amount: cut, href: "/money#everyday" });
     }
     // 3) Still short: subscriptions that could be paused, smallest sacrifice per dollar first.
     if (need > 0) {
@@ -113,24 +113,24 @@ export function periodCoach(data: HomeData, today: Date, period: PeriodRange): P
       for (const s of subs) {
         if (need <= 0) break;
         need -= s.bill.amount;
-        actions.push({ kind: "pause", title: `Pause ${s.bill.name} — ${money(s.bill.amount)}`, detail: "A want on autopay. Skipping one cycle covers part of the gap without touching a need.", amount: s.bill.amount, href: "/bills" });
+        actions.push({ kind: "pause", ref: `pause:${s.bill.id}`, title: `Pause ${s.bill.name} — ${money(s.bill.amount)}`, detail: "A want on autopay. Skipping one cycle covers part of the gap without touching a need.", amount: s.bill.amount, href: "/bills" });
       }
     }
     if (need > 0) {
       const next = landmarks[0];
-      actions.push({ kind: "note", title: `Still ${money(need)} short after the cuts above`, detail: next ? `Either push “${next.landmark.name}” (${money(next.landmark.amount)}) out a month, or drop the extra debt payment this period (${money(debtExtra)}).` : `Drop the extra debt payment this period (${money(debtExtra)}) or let a landmark slip a month.`, amount: need, href: "/plan?view=year" });
+      actions.push({ kind: "note", ref: "short", title: `Still ${money(need)} short after the cuts above`, detail: next ? `Either push “${next.landmark.name}” (${money(next.landmark.amount)}) out a month, or drop the extra debt payment this period (${money(debtExtra)}).` : `Drop the extra debt payment this period (${money(debtExtra)}) or let a landmark slip a month.`, amount: need, href: "/plan?view=year" });
     }
   } else if (room - wantsLeft > 0) {
     // Surplus: where it does the most good.
     const surplus = room - wantsLeft;
     const plan = simulatePayoff(debtsFromAccounts(data.accounts), data.settings.strategy, data.settings.extraPayment);
     const target = plan.order[0];
-    if (target) actions.push({ kind: "surplus", title: `${money(surplus)} more than the plan needs this period`, detail: `Send it to ${target.name} (${target.apr ? `${target.apr}% APR, ` : ""}next in your ${data.settings.strategy} order). Every ${money(100)} there is about ${money(100 * (target.apr || 20) / 100)} a year you don't pay in interest.`, amount: surplus, href: "/plan" });
-    else if (landmarks[0]) actions.push({ kind: "surplus", title: `${money(surplus)} more than the plan needs this period`, detail: `Put it toward “${landmarks[0].landmark.name}” — it lands in ${landmarks[0].periodsAway} period${landmarks[0].periodsAway === 1 ? "" : "s"}.`, amount: surplus, href: "/plan?view=year" });
+    if (target) actions.push({ kind: "surplus", ref: `surplus:${target.id}`, title: `${money(surplus)} more than the plan needs this period`, detail: `Send it to ${target.name} (${target.apr ? `${target.apr}% APR, ` : ""}next in your ${data.settings.strategy} order). Every ${money(100)} there is about ${money(100 * (target.apr || 20) / 100)} a year you don't pay in interest.`, amount: surplus, href: "/plan" });
+    else if (landmarks[0]) actions.push({ kind: "surplus", ref: `surplus:landmark`, title: `${money(surplus)} more than the plan needs this period`, detail: `Put it toward “${landmarks[0].landmark.name}” — it lands in ${landmarks[0].periodsAway} period${landmarks[0].periodsAway === 1 ? "" : "s"}.`, amount: surplus, href: "/plan?view=year" });
   }
 
   // Always: what to set aside for the landmarks ahead.
-  if (setAside > 0) actions.push({ kind: "set-aside", title: `Set aside ${money(setAside)} this period for what's coming`, detail: landmarks.slice(0, 4).map((l) => `${l.landmark.name} ${money(l.perPeriod)}`).join(" · ") + (landmarks.length > 4 ? ` · +${landmarks.length - 4} more` : ""), amount: setAside, href: "/plan?view=year" });
+  if (setAside > 0) actions.push({ kind: "set-aside", ref: "set-aside", title: `Set aside ${money(setAside)} this period for what's coming`, detail: landmarks.slice(0, 4).map((l) => `${l.landmark.name} ${money(l.perPeriod)}`).join(" · ") + (landmarks.length > 4 ? ` · +${landmarks.length - 4} more` : ""), amount: setAside, href: "/plan?view=year" });
 
   return { period, paycheck, billsLeft, needsLeft, setAside, debtExtra, room, wantsLeft, gap, verdict, lines, landmarks, actions };
 }

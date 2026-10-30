@@ -252,6 +252,8 @@ export interface CalendarItem {
 }
 
 /** A "look at this later" marker. `ref` is the merchant key, transaction id, or deposit id. */
+export interface Commitment { id: string; periodFrom: string; ref: string; kind: string; title: string; detail: string; amount?: number; href?: string; done?: boolean; at: string }
+
 export interface Flag { id: string; kind: "merchant" | "transaction" | "deposit"; ref: string; label: string; note?: string; at: string; done?: boolean }
 
 export interface HomeData {
@@ -274,6 +276,8 @@ export interface HomeData {
   grocery?: Record<string, { checked: string[]; extras: string[] }>;
   /** Payments received on loan/card accounts (the receiving side of your own payments). Undefined = never collected yet → next sync re-pulls history. */
   credits?: Credit[];
+  /** Moves from "What to do this period" the household agreed to. Keyed by the period's start date + the move's ref. */
+  commitments?: Commitment[];
   /** Things flagged for a later look: a whole merchant, one transaction, or one deposit. */
   flags?: Flag[];
   /** Imported credit reports (parsed on-device; no SSN or addresses kept). See lib/credit. */

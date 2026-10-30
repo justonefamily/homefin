@@ -16,6 +16,7 @@ import { uid } from "@/lib/storage/adapter";
 import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
 import { Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import { YearPlanView } from "@/components/YearPlanView";
+import { PeriodCoach } from "@/components/PeriodCoach";
 import { actualsForMonth, spendItems } from "@/lib/actuals";
 import { expectedMonthlyIncome } from "@/lib/detect";
 import { useItem } from "@/store/useItem";
@@ -55,6 +56,7 @@ export default function PlanPage() {
                 <div className="text-[11px] text-muted">On top of every minimum. Freed-up minimums roll into the next debt automatically.</div>
               </Card>
             )}
+            <PeriodCoach today={today} />
           </div>
           <div className="md:col-span-8 flex flex-col gap-4">
             {strat.kind === "payoff" ? <PayoffView /> : <SplitView />}

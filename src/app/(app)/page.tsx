@@ -10,7 +10,7 @@ import { useToday } from "@/components/hooks";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { Card, Mark, Row, SectionTitle, cx, fmt, money } from "@/components/ui";
 import { billsInRange, currentPeriodRange, periodsTouching, weeklyProjection } from "@/lib/projections";
-import { PeriodCoach } from "@/components/PeriodCoach";
+import { PeriodFocus } from "@/components/PeriodCoach";
 import { debtsFromAccounts, simulatePayoff, strategyMeta } from "@/lib/strategies";
 import { CreditCard, BarChart3, CalendarDays, Sparkles, Flag } from "lucide-react";
 import { openFlags } from "@/lib/flags";
@@ -109,7 +109,7 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-          <PeriodCoach today={today} period={period} />
+          <PeriodFocus today={today} period={period} />
         </div>
 
         <div className="md:col-span-7 flex flex-col gap-4">
