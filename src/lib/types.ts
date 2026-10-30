@@ -65,7 +65,12 @@ export interface BudgetCategory {
   /** Maps the category into 50/30/20 and 6 Cans buckets. "reimbursable" = money you front and get back (work expenses,
    *  splitting a bill with friends) — left out of spending, and the deposit that returns it counts as income. */
   bucket: "needs" | "wants" | "savings" | "giving" | "education" | "play" | "reimbursable";
+  /** Who manages this category — id of a column in settings.budgetManagers. Unset = unassigned. */
+  managerId?: string;
 }
+
+/** A "manager" column on the Budget page: a person in the home who owns a set of categories. */
+export interface BudgetManager { id: string; name: string; /** home member user id, when picked from the home */ userId?: string }
 
 export interface Transaction {
   id: string;
@@ -138,6 +143,8 @@ export interface Settings {
   dismissedSuggestions?: string[];
   /** Plaid account ids the user hid — sync skips them without disconnecting the bank. */
   hiddenAccounts?: string[];
+  /** Manager columns on the Budget page (who owns which categories). Empty = one plain list. */
+  budgetManagers?: BudgetManager[];
   /** Set once every linked bank has been re-pulled from the start to collect loan/card credits (payment destinations). */
   creditsBackfilledAt?: string;
   /** Merchant pairs the user said are NOT the same place ("keyA|keyB", sorted) — never suggested again. */

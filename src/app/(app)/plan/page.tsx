@@ -8,7 +8,10 @@ import Link from "next/link";
 import { useToday } from "@/components/hooks";
 import { Button, Card, Eyebrow, Field, Modal, ProgressBar, Segmented, SectionTitle, Stat, cx, fmt, inputCls, money, selectCls, byName } from "@/components/ui";
 import { STRATEGIES, babySteps, budgetRows, debtsFromAccounts, monthKey, simulatePayoff, splitRows, strategyMeta } from "@/lib/strategies";
-import type { BudgetCategory, StrategyId } from "@/lib/types";
+import type { BudgetCategory, BudgetManager, StrategyId } from "@/lib/types";
+import { createClient, supabaseConfigured } from "@/lib/supabase/client";
+import { useEffect } from "react";
+import { UserPlus, X } from "lucide-react";
 import { uid } from "@/lib/storage/adapter";
 import { applyRecommendations, quarterOf, recommendBudgets } from "@/lib/detect";
 import { Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
@@ -243,6 +246,8 @@ function SplitView() {
   );
 }
 
+const h0 = (data: { budgets: { id: string; name: string }[] }, id: string) => data.budgets.find((b) => b.id === id)?.name ?? "category";
+
 function BudgetView({ today }: { today: Date }) {
   const { data: d, update } = useHome();
   const data = d!;
@@ -279,6 +284,27 @@ function BudgetView({ today }: { today: Date }) {
   const applyOne = (id: string) => update((h) => applyRecommendations(h, recs, [id]), "applied a budget recommendation");
   const toggleAuto = () => update((h) => ({ ...h, settings: { ...h.settings, autoApplyBudgetRecommendations: !h.settings.autoApplyBudgetRecommendations } }), "toggled auto budget reset");
   const save = (c: BudgetCategory) => update((h) => ({ ...h, budgets: h.budgets.some((x) => x.id === c.id) ? h.budgets.map((x) => (x.id === c.id ? c : x)) : [...h.budgets, c] }), `saved budget ${c.name}`);
+  // Manager columns: who owns which categories. Names come from the people in the home (or typed by hand).
+  const managers = data.settings.budgetManagers ?? [];
+  const [members, setMembers] = useState<{ userId: string; name: string }[]>([]);
+  const adapter = useHome((s) => s.adapter);
+  useEffect(() => {
+    if (!(supabaseConfigured() && adapter.kind === "supabase")) return;
+    let live = true;
+    createClient().from("home_members").select("user_id, display_name").then(({ data: m }) => { if (live) setMembers((m ?? []).map((x) => ({ userId: x.user_id, name: x.display_name ?? "Member" }))); });
+    return () => { live = false; };
+  }, [adapter]);
+  const setManagers = (ms: BudgetManager[], note: string) => update((h) => ({ ...h, settings: { ...h.settings, budgetManagers: ms } }), note);
+  const addManager = () => setManagers([...managers, { id: uid(), name: "" }], "added a manager column");
+  const renameManager = (id: string, name: string, userId?: string) => setManagers(managers.map((m) => (m.id === id ? { ...m, name, userId } : m)), `manager column: ${name || "unnamed"}`);
+  const removeManager = (id: string) => update((h) => ({ ...h, settings: { ...h.settings, budgetManagers: (h.settings.budgetManagers ?? []).filter((m) => m.id !== id) }, budgets: h.budgets.map((b) => (b.managerId === id ? { ...b, managerId: undefined } : b)) }), "removed a manager column");
+  const assign = (catId: string, managerId: string | undefined) => update((h) => ({ ...h, budgets: h.budgets.map((b) => (b.id === catId ? { ...b, managerId } : b)) }), managerId ? `assigned ${h0(data, catId)} to ${managers.find((m) => m.id === managerId)?.name || "a manager"}` : `unassigned ${h0(data, catId)}`);
+  const managerName = (id?: string) => managers.find((m) => m.id === id)?.name || "Unnamed";
+  // Columns: one per manager (in order) + Unassigned on the right. Each keeps the most-over-first order.
+  const columns: { id: string | undefined; title: string; rows: typeof rows; manager?: BudgetManager }[] = [
+    ...managers.map((m) => ({ id: m.id as string | undefined, title: m.name || "Pick a name", rows: rows.filter((r) => data.budgets.find((b) => b.id === r.id)?.managerId === m.id), manager: m })),
+    { id: undefined, title: managers.length ? "Unassigned" : "All categories", rows: rows.filter((r) => { const mid = data.budgets.find((b) => b.id === r.id)?.managerId; return !mid || !managers.some((m) => m.id === mid); }) },
+  ];
   const remove = (id: string) => update((h) => ({ ...h, budgets: h.budgets.filter((b) => b.id !== id) }), "deleted budget category");
   return (
     <div className="flex flex-col gap-4">
@@ -310,10 +336,40 @@ function BudgetView({ today }: { today: Date }) {
           <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!data.settings.autoApplyBudgetRecommendations} onChange={toggleAuto} className="w-4 h-4 accent-[#0e6b74]" /> Reset my budgets to the recommendations automatically at the start of each quarter</label>
         </Card>
       )}
-      <Card className="md:grid md:grid-cols-2">
-        {rows.map((r) => (
-          <button key={r.id} onClick={() => setEditing(data.budgets.find((b) => b.id === r.id)!)} className="flex flex-col gap-1.5 px-4 py-3 border-b border-line-soft text-left hover:bg-surface/60 md:[&:nth-child(odd)]:border-r">
-            <div className="flex items-baseline justify-between"><div className="text-sm font-semibold">{r.name}</div><div className="text-xs text-muted">{money(r.spent)} of {money(r.limit)}</div></div>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-[12px] text-muted">{managers.length ? "Each column is a manager; tap a category's name chip to move it between people." : "Add a manager column to split the budget by who owns what."}</div>
+        <button onClick={addManager} className="h-9 px-3 rounded-[10px] border border-line bg-card text-[12px] font-semibold hover:border-field inline-flex items-center gap-1.5"><UserPlus size={14} /> Add manager column</button>
+      </div>
+      <div className={cx("grid gap-3 items-start", columns.length === 1 ? "grid-cols-1" : columns.length === 2 ? "md:grid-cols-2" : columns.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2 xl:grid-cols-4")}>
+      {columns.map((col) => {
+        const colTotal = col.rows.reduce((s, r) => s + r.limit, 0), colSpent = col.rows.reduce((s, r) => s + r.spent, 0);
+        return (
+      <Card key={col.id ?? "none"} className={cx("flex flex-col", columns.length === 1 && "md:grid md:grid-cols-2")}>
+        {(managers.length > 0) && (
+          <div className={cx("flex items-center gap-2 px-4 py-2.5 border-b border-line bg-surface", columns.length === 1 && "md:col-span-2")}>
+            {col.manager ? (
+              <select className={cx(selectCls, "h-9 text-[13px] font-semibold flex-1")} value={col.manager.userId ? `u:${col.manager.userId}` : col.manager.name ? `n:${col.manager.name}` : ""} onChange={(e) => { const v = e.target.value; if (v.startsWith("u:")) { const mem = members.find((m) => m.userId === v.slice(2)); renameManager(col.manager!.id, mem?.name ?? "", mem?.userId); } else if (v === "other") { const n = prompt("Name for this column"); if (n) renameManager(col.manager!.id, n); } }}>
+                <option value="">Pick a name…</option>
+                {members.map((m) => <option key={m.userId} value={`u:${m.userId}`}>{m.name}</option>)}
+                {col.manager.name && !col.manager.userId && <option value={`n:${col.manager.name}`}>{col.manager.name}</option>}
+                <option value="other">Someone else…</option>
+              </select>
+            ) : <div className="flex-1 text-[13px] font-semibold">{col.title}</div>}
+            <div className="text-[11px] text-muted whitespace-nowrap">{money(colSpent)} of {money(colTotal)}</div>
+            {col.manager && <button onClick={() => { if (confirm(`Remove this column? Its categories move to Unassigned.`)) removeManager(col.manager!.id); }} aria-label="Remove column" className="w-7 h-7 rounded-full flex items-center justify-center text-muted hover:bg-card hover:text-ink"><X size={13} /></button>}
+          </div>
+        )}
+        {col.rows.length === 0 && <div className="px-4 py-4 text-[12px] text-muted">Nothing here yet — tap a category&apos;s chip in another column to move it in.</div>}
+        {col.rows.map((r) => (
+          <button key={r.id} onClick={() => setEditing(data.budgets.find((b) => b.id === r.id)!)} className={cx("flex flex-col gap-1.5 px-4 py-3 border-b border-line-soft text-left hover:bg-surface/60", columns.length === 1 && "md:[&:nth-child(odd)]:border-r")}>
+            <div className="flex items-baseline justify-between gap-2"><div className="text-sm font-semibold flex-1 min-w-0 truncate">{r.name}</div>
+              {managers.length > 0 && (
+                <select onClick={(e) => e.stopPropagation()} onChange={(e) => { e.stopPropagation(); assign(r.id, e.target.value || undefined); }} value={data.budgets.find((b) => b.id === r.id)?.managerId ?? ""} aria-label="Managed by" className="h-6 max-w-[7rem] rounded-full border border-chip bg-card px-2 text-[10px] font-semibold text-muted appearance-none cursor-pointer hover:border-field">
+                  <option value="">Unassigned</option>
+                  {managers.map((m) => <option key={m.id} value={m.id}>{managerName(m.id)}</option>)}
+                </select>
+              )}
+              <div className="text-xs text-muted whitespace-nowrap">{money(r.spent)} of {money(r.limit)}</div></div>
             <ProgressBar pct={r.pct} color={r.state === "over" ? "bg-red" : r.state === "ahead" ? "bg-amber" : "bg-accent"} marker={pace} />
             <div className="flex items-center justify-between gap-2">
               <div className={cx("text-[11px] font-semibold", r.state === "over" ? "text-red" : r.state === "ahead" ? "text-amber" : "text-accent")}>
@@ -326,6 +382,9 @@ function BudgetView({ today }: { today: Date }) {
           </button>
         ))}
       </Card>
+        );
+      })}
+      </div>
       <Button variant="dashed" onClick={() => setEditing("new")}>+ Add a budget category</Button>
       {editing && <CategoryForm cat={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSave={save} onDelete={remove} feeding={editing === "new" ? undefined : <Feeding categoryId={editing.id} month={scale === "month" ? window_[0] : window_} monthLabel={label} onClose={() => setEditing(null)} />} />}
     </div>
@@ -365,6 +424,8 @@ function Feeding({ categoryId, month, monthLabel, onClose }: { categoryId: strin
 }
 
 function CategoryForm({ cat, onClose, onSave, onDelete, feeding }: { cat?: BudgetCategory; onClose: () => void; onSave: (c: BudgetCategory) => void; onDelete: (id: string) => void; feeding?: ReactNode }) {
+  const managers = useHome((s) => s.data?.settings.budgetManagers ?? []);
+  const [managerId, setManagerId] = useState(cat?.managerId ?? "");
   const [name, setName] = useState(cat?.name ?? "");
   const [limit, setLimit] = useState(cat?.limit ?? 0);
   const [bucket, setBucket] = useState<BudgetCategory["bucket"]>(cat?.bucket ?? "needs");
@@ -382,9 +443,17 @@ function CategoryForm({ cat, onClose, onSave, onDelete, feeding }: { cat?: Budge
           <option value="education">Education</option><option value="giving">Giving / tithe</option><option value="needs">Needs / necessities</option><option value="play">Play</option><option value="reimbursable">Reimbursable expense — money comes back</option><option value="savings">Savings & debt</option><option value="wants">Wants</option>
         </select>
       </Field>
+      {managers.length > 0 && (
+        <Field label="Managed by">
+          <select className={selectCls} value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+            <option value="">Unassigned</option>
+            {managers.map((m) => <option key={m.id} value={m.id}>{m.name || "Unnamed"}</option>)}
+          </select>
+        </Field>
+      )}
       <div className="flex gap-2 pt-1">
         {cat && <Button variant="danger" onClick={() => { onDelete(cat.id); onClose(); }}>Delete</Button>}
-        <Button className="flex-1" disabled={!name} onClick={() => { onSave({ id: cat?.id ?? uid(), name, limit, bucket, defaultLimit: defaultLimit || undefined }); onClose(); }}>Save</Button>
+        <Button className="flex-1" disabled={!name} onClick={() => { onSave({ id: cat?.id ?? uid(), name, limit, bucket, defaultLimit: defaultLimit || undefined, managerId: managerId || undefined }); onClose(); }}>Save</Button>
       </div>
     </Modal>
   );
