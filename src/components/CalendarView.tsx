@@ -260,7 +260,7 @@ function DishLibrary() {
 async function suggestDishes(names: string[]) {
   try {
     const r = await fetch("/api/dishes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ names }) });
-    if (r.ok) { const j = (await r.json()) as { dishes: { name: string; course: Course; ingredients: string[] }[]; ai: boolean }; return j; }
+    if (r.ok) { const j = (await r.json()) as { dishes: { name: string; course: Course; ingredients: string[]; confident?: boolean }[]; ai: boolean; error?: string }; return j; }
   } catch { /* fall through */ }
   return { dishes: names.map((name) => ({ name, ...guessDish(name) })), ai: false };
 }
@@ -375,7 +375,15 @@ function DishForm({ dish, course: initialCourse, onClose, onSave, onRemove }: { 
   const [url, setUrl] = useState(dish?.url ?? "");
   const [ingredients, setIngredients] = useState((dish?.ingredients ?? []).join(", "));
   const [suggesting, setSuggesting] = useState(false);
-  const suggest = async () => { setSuggesting(true); const r = await suggestDishes([name.trim()]); const g = r.dishes[0]; if (g) { setIngredients(g.ingredients.join(", ")); if (!dish) setCourse(g.course); } setSuggesting(false); };
+  const [suggestNote, setSuggestNote] = useState<string | null>(null);
+  const suggest = async () => {
+    setSuggesting(true); setSuggestNote(null);
+    const r = await suggestDishes([name.trim()]);
+    const g = r.dishes[0];
+    if (g && g.ingredients.length) { setIngredients(g.ingredients.join(", ")); if (!dish) setCourse(g.course); setSuggestNote(r.ai ? "Suggested with AI — edit any line." : "From the built-in list — edit any line."); }
+    else setSuggestNote(r.ai ? `Couldn't come up with ingredients for “${name.trim()}”${r.error ? ` (${r.error})` : ""}.` : `“${name.trim()}” isn't in the built-in list, and AI suggestions aren't switched on yet (ANTHROPIC_API_KEY in Vercel). Type the ingredients, or add the key so any dish works.`);
+    setSuggesting(false);
+  };
   return (
     <Modal open onClose={onClose} title={dish ? "Edit dish" : `Add a ${COURSE_SINGULAR[initialCourse]}`}>
       <div className="grid grid-cols-2 gap-3">
@@ -387,6 +395,7 @@ function DishForm({ dish, course: initialCourse, onClose, onSave, onRemove }: { 
           <input className={cx(inputCls, "flex-1")} value={ingredients} onChange={(e) => setIngredients(e.target.value)} placeholder="tortillas, ground beef, onion, tomato…" />
           <Button variant="secondary" disabled={!name.trim() || suggesting} onClick={suggest} className="h-11 px-3 text-xs shrink-0">{suggesting ? <Loader2 size={14} className="animate-spin" /> : <><Sparkles size={13} className="inline -mt-0.5 mr-1" />Suggest</>}</Button>
         </div>
+        {suggestNote && <div className={cx("text-[11px] mt-1", suggestNote.startsWith("Suggested") || suggestNote.startsWith("From") ? "text-muted" : "text-amber")}>{suggestNote}</div>}
       </Field>
       <Field label="Tags (comma-separated)" hint="e.g. healthy, quick, kid-friendly, Sunday"><input className={inputCls} value={tags} onChange={(e) => setTags(e.target.value)} /></Field>
       <Field label="Notes"><input className={inputCls} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Marinate 2 hrs · serves 6" /></Field>
