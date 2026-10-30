@@ -57,9 +57,10 @@ export async function POST() {
     // 2) Liabilities (APR, minimum payment) — optional
     try {
       const li = await client.liabilitiesGet({ access_token: it.access_token });
-      for (const c of li.data.liabilities.credit ?? []) { const a = home.accounts.find((x) => x.id === c.account_id); if (a) { a.apr = c.aprs?.[0]?.apr_percentage ?? a.apr; a.minPayment = c.minimum_payment_amount ?? a.minPayment; } }
-      for (const s of li.data.liabilities.student ?? []) { const a = home.accounts.find((x) => x.id === s.account_id); if (a) { a.apr = s.interest_rate_percentage ?? a.apr; a.minPayment = s.minimum_payment_amount ?? a.minPayment; } }
-      for (const m of li.data.liabilities.mortgage ?? []) { const a = home.accounts.find((x) => x.id === m.account_id); if (a) { a.apr = m.interest_rate?.percentage ?? a.apr; a.minPayment = m.next_monthly_payment ?? a.minPayment; } }
+      // Hand-entered terms win over what the bank reports.
+      for (const c of li.data.liabilities.credit ?? []) { const a = home.accounts.find((x) => x.id === c.account_id); if (a && !a.termsManual) { a.apr = c.aprs?.[0]?.apr_percentage ?? a.apr; a.minPayment = c.minimum_payment_amount ?? a.minPayment; } }
+      for (const s of li.data.liabilities.student ?? []) { const a = home.accounts.find((x) => x.id === s.account_id); if (a && !a.termsManual) { a.apr = s.interest_rate_percentage ?? a.apr; a.minPayment = s.minimum_payment_amount ?? a.minPayment; } }
+      for (const m of li.data.liabilities.mortgage ?? []) { const a = home.accounts.find((x) => x.id === m.account_id); if (a && !a.termsManual) { a.apr = m.interest_rate?.percentage ?? a.apr; a.minPayment = m.next_monthly_payment ?? a.minPayment; } }
     } catch (e) {
       console.warn("plaid liabilitiesGet", label, plaidError(e).code);
     }

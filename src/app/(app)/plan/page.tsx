@@ -110,20 +110,52 @@ function AddFromCredit() {
   );
 }
 
+/** Every card and loan's minimum payment (and APR), editable — what the payoff math runs on. */
+function MinimumsSheet({ onClose }: { onClose: () => void }) {
+  const { data: d, update } = useHome();
+  const data = d!;
+  const debts = data.accounts.filter((a) => a.kind === "credit" || a.kind === "loan" || a.kind === "mortgage").sort((a, b) => `${a.institution} ${a.name}`.localeCompare(`${b.institution} ${b.name}`));
+  const guessed = (a: typeof debts[number]) => a.minPayment == null;
+  const setTerms = (id: string, patch: { minPayment?: number; apr?: number }) => update((h) => ({ ...h, accounts: h.accounts.map((a) => (a.id === id ? { ...a, ...patch, termsManual: true } : a)) }), `updated terms for ${data.accounts.find((a) => a.id === id)?.name ?? "account"}`);
+  const resetTerms = (id: string) => update((h) => ({ ...h, accounts: h.accounts.map((a) => (a.id === id ? { ...a, termsManual: undefined } : a)) }), "terms back to the bank's numbers");
+  const total = debtsFromAccounts(data.accounts).reduce((s, x) => s + x.min, 0);
+  return (
+    <Modal open onClose={onClose} title="Minimum payments">
+      <div className="text-[12px] text-muted -mt-1">What each card and loan requires every month. The payoff plan uses these; the extra payment goes on top. Edit any that the bank reports wrong — hand-entered numbers stick through syncs.</div>
+      <div className="rounded-[12px] border border-line overflow-hidden">
+        <div className="hidden sm:grid grid-cols-[1fr_7rem_6rem] gap-2 px-3 py-2 text-[11px] font-semibold text-muted bg-surface border-b border-line"><div>Account</div><div>Minimum / mo</div><div>APR %</div></div>
+        {debts.map((a) => (
+          <div key={a.id} className="grid grid-cols-1 sm:grid-cols-[1fr_7rem_6rem] gap-2 px-3 py-2 border-b border-line-soft last:border-b-0 items-center">
+            <div className="min-w-0"><div className="text-[13px] font-semibold truncate">{a.institution} · {a.name}</div><div className="text-[11px] text-muted">{a.kind} · owes {money(a.balance)}{a.termsManual ? " · set by hand" : guessed(a) ? " · minimum guessed (2%)" : " · from the bank"}{a.termsManual && <> · <button onClick={() => resetTerms(a.id)} className="text-accent font-semibold">use bank&apos;s</button></>}</div></div>
+            <input className={cx(inputCls, "h-9 text-[13px]")} type="number" inputMode="decimal" placeholder={String(Math.round(Math.max(25, a.balance * 0.02)))} value={a.minPayment ?? ""} onChange={(e) => setTerms(a.id, { minPayment: e.target.value === "" ? undefined : Number(e.target.value) })} aria-label={`${a.name} minimum payment`} />
+            <input className={cx(inputCls, "h-9 text-[13px]")} type="number" inputMode="decimal" step="0.01" placeholder="APR" value={a.apr ?? ""} onChange={(e) => setTerms(a.id, { apr: e.target.value === "" ? undefined : Number(e.target.value) })} aria-label={`${a.name} APR`} />
+          </div>
+        ))}
+      </div>
+      <div className="flex items-baseline justify-between text-[13px]"><div className="font-semibold">Minimums every month (cards + loans)</div><div className="font-bold">{money(total)}</div></div>
+    </Modal>
+  );
+}
+
 function PayoffView() {
   const data = useHome((s) => s.data)!;
   const debts = debtsFromAccounts(data.accounts);
   const plan = simulatePayoff(debts, data.settings.strategy, data.settings.extraPayment);
   const isBaby = data.settings.strategy === "baby";
   const steps = isBaby ? babySteps(data) : [];
+  const [minsOpen, setMinsOpen] = useState(false);
+  const minimums = debts.reduce((s, x) => s + x.min, 0);
+  const guessedCount = data.accounts.filter((a) => (a.kind === "credit" || a.kind === "loan") && a.balance > 0 && a.minPayment == null).length;
   if (debts.length === 0) return <Card className="p-5 text-sm text-muted">No debts tracked. Add credit cards or loans under Accounts and the payoff plan appears here.</Card>;
   return (
     <>
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
         <Stat dark label="Total debt" value={money(plan.totalDebt)} />
         <Stat label="Debt-free in" value={`${plan.months} mo`} />
         <Stat label="Interest paid" value={money(plan.totalInterest)} />
+        <button onClick={() => setMinsOpen(true)} className="text-left"><Stat label="Minimums / mo" value={money(minimums)} tone={guessedCount ? "amber" : undefined} sub={guessedCount ? `${guessedCount} guessed · tap to fix` : "tap to edit"} /></button>
       </div>
+      {minsOpen && <MinimumsSheet onClose={() => setMinsOpen(false)} />}
 
       {isBaby && (
         <Card className="p-4 flex flex-col gap-3">

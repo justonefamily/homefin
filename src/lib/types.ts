@@ -18,6 +18,8 @@ export interface Account {
   mask?: string; // last 4
   apr?: number;
   minPayment?: number;
+  /** True when the household typed the minimum (or APR) by hand — a bank sync won't overwrite it. */
+  termsManual?: boolean;
   /** "plaid" | "manual" | "email" | "csv" */
   source: "plaid" | "manual" | "email" | "csv";
   plaidItemId?: string;
