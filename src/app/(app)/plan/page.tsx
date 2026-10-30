@@ -303,8 +303,8 @@ function BudgetView({ today }: { today: Date }) {
   // Columns: one per manager (in order) + Unassigned on the right. Each keeps the most-over-first order.
   const columns: { id: string | undefined; title: string; rows: typeof rows; manager?: BudgetManager }[] = [
     ...managers.map((m) => ({ id: m.id as string | undefined, title: m.name || "Pick a name", rows: rows.filter((r) => data.budgets.find((b) => b.id === r.id)?.managerId === m.id), manager: m })),
-    { id: undefined, title: managers.length ? "Unassigned" : "All categories", rows: rows.filter((r) => { const mid = data.budgets.find((b) => b.id === r.id)?.managerId; return !mid || !managers.some((m) => m.id === mid); }) },
-  ];
+    { id: undefined, title: managers.length ? "Unassigned" : "All categories", rows: rows.filter((r) => { const mid = data.budgets.find((b) => b.id === r.id)?.managerId; return !mid || !managers.some((m) => m.id === mid); }), manager: undefined },
+  ].filter((col) => col.manager || !managers.length || col.rows.length > 0); // Unassigned disappears once everything has an owner
   const remove = (id: string) => update((h) => ({ ...h, budgets: h.budgets.filter((b) => b.id !== id) }), "deleted budget category");
   return (
     <div className="flex flex-col gap-4">
