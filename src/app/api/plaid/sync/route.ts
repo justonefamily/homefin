@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { mergeAccounts, mergeTransactions, plaid, plaidError } from "@/lib/plaid";
 import { autoMarkPaid, matchIncomeEvents } from "@/lib/detect";
-import { dedupeIncome, matchInternalTransfers, matchPaymentsToCredits } from "@/lib/merchants";
+import { dedupeIncome, matchPaymentsToCredits, rematchInternalTransfers } from "@/lib/merchants";
 import { adminClient } from "@/lib/supabase/server";
 import { CountryCode } from "plaid";
 import type { HomeData } from "@/lib/types";
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
       if (home.credits === undefined) home = { ...home, credits: [] };
       if (!home.settings.creditsBackfilledAt) home = { ...home, settings: { ...home.settings, creditsBackfilledAt: new Date().toISOString() } };
       home = dedupeIncome(home) ?? home;
-      home = matchInternalTransfers(home) ?? home;
+      home = rematchInternalTransfers(home);
       home = matchPaymentsToCredits(home) ?? home;
       const matched = matchIncomeEvents(home);
       if (matched) home = { ...home, income: matched };

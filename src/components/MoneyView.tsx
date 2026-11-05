@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, ArrowDownLeft, ArrowUpRight, Merge, Search, 
 import { addDays, addMonths, differenceInCalendarDays, endOfMonth, getDaysInMonth, startOfMonth, startOfWeek } from "date-fns";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Segmented, cx, inputCls, money } from "./ui";
-import { flowFor, merchantSummaries, mergeMerchants, pairKey, similarMerchants, txKey, type FlowLine, type MerchantSummary } from "@/lib/merchants";
+import { flowFor, merchantSummaries, mergeMerchants, pairKey, rematchInternalTransfers, setMerchantPref, similarMerchants, txKey, type FlowLine, type MerchantSummary } from "@/lib/merchants";
 import { ItemSheet, DepositSheet } from "./ItemSheet";
 import { LedgerView } from "./LedgerView";
 import { openFlags, removeFlag, resolveFlag, setFlagNote } from "@/lib/flags";
@@ -173,7 +173,7 @@ function MerchantsView({ today }: { today: Date }) {
                 {badge && <span className={cx("shrink-0 text-[10px] font-semibold rounded px-1.5 py-0.5", badge.cls)}>{badge.text}</span>}
                 <span className="truncate">{catName(m.category)} · {m.accountIds.length === 1 ? acctName(m.accountIds[0]) : `${m.accountIds.length} accounts`}{m.merged.length ? ` · +${m.merged.length} merged` : ""}</span>
               </div>
-              <div className="text-[11px] text-muted text-right whitespace-nowrap">{m.count}×{span === "1m" ? "" : ` · ${money(m.perMonth)}/mo`}</div>
+              <div className="text-[11px] text-muted text-right whitespace-nowrap flex items-center gap-2 justify-end">{m.kind === "transfer" && filter === "transfer" && <span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); update((h) => setMerchantPref(h, m.key, { kind: "spend" }), `${m.name}: it's spending`); }} onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); update((h) => setMerchantPref(h, m.key, { kind: "spend" }), `${m.name}: it's spending`); } }} className="h-7 px-2 rounded-full border border-line bg-card text-[10px] font-semibold text-ink hover:border-field">It&apos;s spending</span>}{m.count}×{span === "1m" ? "" : ` · ${money(m.perMonth)}/mo`}</div>
               <div className="col-span-2 h-1 rounded-full bg-line-soft overflow-hidden"><div className={cx("h-full rounded-full", m.kind === "bill" ? "bg-accent" : m.kind === "transfer" ? "bg-chip" : "bg-ink")} style={{ width: `${Math.max(2, (m.total / max) * 100)}%` }} /></div>
             </button>
           );
@@ -189,6 +189,12 @@ function MerchantsView({ today }: { today: Date }) {
       </div>
       <div className="text-[11px] text-muted -mt-2">{list.length} merchant{list.length === 1 ? "" : "s"} · {money(total)} · {spanLabel}{filter !== "all" ? ` · ${{ spend: "spending only", bill: "bills only", reimbursable: "coming back only", transfer: "transfers only", ignore: "hidden only" }[filter]}` : ""}</div>
 
+      {filter === "transfer" && (
+        <Card className="p-3.5 flex flex-col sm:flex-row sm:items-center gap-2 border-amber-line bg-amber-bg/40 text-[12px]">
+          <div className="flex-1"><b>Only moves between your own checking and savings accounts belong here.</b> Card and loan payments are bills; Zelle to a person is spending. Tap <b>It&apos;s spending</b> on anything that isn&apos;t a real transfer, or re-check them all under today&apos;s rules.</div>
+          <Button variant="secondary" onClick={() => update((h) => rematchInternalTransfers(h), "re-checked transfers")} className="h-9 text-xs whitespace-nowrap">Re-check transfers</Button>
+        </Card>
+      )}
       {similar.length > 0 && (
         <Card className="p-4 flex flex-col gap-2 border-accent-line bg-accent-bg/40">
           <button onClick={() => setShowSimilar(!showSimilar)} aria-expanded={showSimilar} className="flex items-center gap-2 text-left"><ChevronRight size={15} className={cx("text-accent transition-transform", showSimilar && "rotate-90")} /><Merge size={15} className="text-accent" /><div className="text-sm font-semibold">These might be the same place</div><div className="text-[11px] text-muted">· {similar.length}</div></button>

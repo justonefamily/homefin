@@ -54,8 +54,9 @@ describe("merchants", () => {
 describe("internal transfers", () => {
   it("pairs a deposit with the matching outflow and ignores both", () => {
     const h = home();
+    h.accounts.push({ id: "shared", name: "Joint", institution: "Bank of America", kind: "checking", balance: 0, source: "manual" });
     h.transactions.push({ id: "z1", accountId: "chk", date: "2026-10-20", description: "Zelle to Ledalis", amount: 300, category: "other" });
-    h.income!.push({ id: "z2", date: "2026-10-21", amount: 300, source: "Zelle from Abraham", accountId: "chk" });
+    h.income!.push({ id: "z2", date: "2026-10-21", amount: 300, source: "Zelle from Abraham", accountId: "shared" });
     const next = matchInternalTransfers(h)!;
     expect(next).not.toBeNull();
     expect(next.transactions.find((t) => t.id === "z1")?.transfer).toBe(true);
@@ -64,11 +65,11 @@ describe("internal transfers", () => {
     expect(f.income).toBe(0); expect(f.spending).toBe(0); expect(f.transfers).toBe(300); expect(f.internalDeposits).toBe(1);
     expect(matchInternalTransfers(next)).toBeNull();
   });
-  it("matches a card payment that posts 5 days later", () => {
+  it("does not call a card payment a transfer (cards and loans are bills, matched through credits instead)", () => {
     const h = home();
     h.transactions.push({ id: "p1", accountId: "chk", date: "2026-10-01", description: "Payment to Chase Card", amount: 450, category: "other" });
     h.income!.push({ id: "p2", date: "2026-10-06", amount: 450, source: "Payment Thank You", accountId: "cc" });
-    expect(matchInternalTransfers(h)!.income!.find((e) => e.id === "p2")?.internal).toBe(true);
+    expect(matchInternalTransfers(h)).toBeNull();
   });
   it("leaves a real deposit alone", () => {
     expect(matchInternalTransfers(home())).toBeNull();
@@ -142,4 +143,25 @@ it("matches an outgoing payment to the credit the loan account received", async 
   // A hand-set destination survives a re-match.
   const manual = setPaymentDestination(out, "p1", "loan2");
   expect(matchPaymentsToCredits(manual)).toBeNull();
+});
+
+it("only pairs transfers between own deposit accounts, and Zelle only with Zelle", async () => {
+  const { matchInternalTransfers, classify, billKeyMap } = await import("./merchants");
+  const h = home();
+  h.accounts.push({ id: "chk", name: "Checking", institution: "A", kind: "checking", balance: 0, source: "manual" }, { id: "sav", name: "Savings", institution: "B", kind: "savings", balance: 0, source: "manual" }, { id: "card", name: "Card", institution: "C", kind: "credit", balance: 500, source: "manual" });
+  h.transactions.push(
+    { id: "z1", accountId: "chk", date: "2026-03-03", description: "ZELLE TO NICK", amount: 40, category: "self" },
+    { id: "x1", accountId: "chk", date: "2026-03-05", description: "ONLINE TRANSFER TO SAVINGS XXXX1234", amount: 500, category: "other" },
+    { id: "c1", accountId: "chk", date: "2026-03-06", description: "CARD PAYMENT", amount: 200, category: "other", toAccountId: "card" },
+  );
+  h.income = [
+    { id: "d1", accountId: "sav", date: "2026-03-04", amount: 40, source: "REFUND FROM STORE" },   // same amount as the Zelle, but not a Zelle → no pairing
+    { id: "d2", accountId: "sav", date: "2026-03-05", amount: 500, source: "ONLINE TRANSFER FROM CHECKING" },
+  ];
+  const out = matchInternalTransfers(h)!;
+  expect(out.transactions.find((t) => t.id === "z1")?.transfer).toBeUndefined();
+  expect(out.transactions.find((t) => t.id === "x1")?.transfer).toBe(true);
+  const bills = billKeyMap(out);
+  expect(classify(out, out.transactions.find((t) => t.id === "z1")!, bills).kind).toBe("spend");
+  expect(classify(out, out.transactions.find((t) => t.id === "c1")!, bills).kind).toBe("bill");
 });

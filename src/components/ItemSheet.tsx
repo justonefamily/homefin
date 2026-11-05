@@ -257,7 +257,7 @@ export function ItemSheet({ merchantKey: rawKey, onClose }: { merchantKey: strin
         {!bill && pref.kind !== "transfer" && <Button variant="secondary" onClick={() => { update((h) => setMerchantPref(h, key, { occasional: !pref.occasional }), note(pref.occasional ? "back to everyday" : "not an everyday spend")); onClose(); }} className="h-10 px-3 text-xs">{pref.occasional ? <><Undo2 size={13} className="inline -mt-0.5 mr-1" />Back to everyday</> : <><Sparkles size={13} className="inline -mt-0.5 mr-1" />Not an everyday spend</>}</Button>}
         {pref.kind !== "transfer" && <Button variant="secondary" onClick={() => setKind("transfer")} className="h-10 px-3 text-xs"><Shuffle size={13} className="inline -mt-0.5 mr-1" />It&apos;s a transfer</Button>}
         {pref.kind !== "ignore" && <Button variant="secondary" onClick={() => setKind("ignore")} className="h-10 px-3 text-xs"><EyeOff size={13} className="inline -mt-0.5 mr-1" />Hide it</Button>}
-        {pref.kind && pref.kind !== "spend" && <Button variant="secondary" onClick={() => setKind("spend")} className="h-10 px-3 text-xs"><Undo2 size={13} className="inline -mt-0.5 mr-1" />Count as spending again</Button>}
+        {((pref.kind && pref.kind !== "spend") || (!pref.kind && (me?.kind === "transfer" || txs.some((t) => t.transfer)))) && <Button variant="secondary" onClick={() => setKind("spend")} className="h-10 px-3 text-xs"><Undo2 size={13} className="inline -mt-0.5 mr-1" />{pref.kind ? "Count as spending again" : "It's spending, not a transfer"}</Button>}
       </div>
       {bill && <div className="text-[11px] text-muted">Amount, due day and autopay for this bill are edited on the Bills page.</div>}
       {liabilities.length > 0 && (

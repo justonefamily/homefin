@@ -1,5 +1,5 @@
 import type { Bill, HomeData, MerchantPref, Transaction } from "./types";
-import { legacyMerchantKey, merchantKey, p2pLabel } from "./detect";
+import { legacyMerchantKey, merchantKey, p2pLabel, p2pParty } from "./detect";
 import { parseNature } from "./nature";
 
 /**
@@ -33,6 +33,9 @@ export function classify(data: HomeData, t: Transaction, billKeys: Map<string, B
   if (pref.kind === "transfer") return { kind: "transfer", key };
   const bill = billKeys.get(key);
   if (bill) return { kind: "bill", key, bill };
+  // A payment that landed on one of your own cards or loans is a bill, never a transfer (only moves between your own
+  // checking/savings accounts are transfers).
+  if (t.toAccountId && pref.kind !== "spend") { const dest = data.accounts.find((a) => a.id === t.toAccountId); if (dest && (dest.kind === "credit" || dest.kind === "loan" || dest.kind === "mortgage")) return { kind: "bill", key }; }
   if (t.transfer && pref.kind !== "spend") return { kind: "transfer", key };
   // The parser's read of the description decides the default: a move between your own accounts isn't spending.
   if (!pref.kind && parseNature(t.description).defaultKind === "transfer") return { kind: "transfer", key };
@@ -325,19 +328,31 @@ const dayDiff = (a: string, b: string) => Math.abs(new Date(a).getTime() - new D
  * window is 7 days; the closest-dated match wins.
  */
 export const TRANSFER_WINDOW_DAYS = 7;
+/**
+ * A transfer is money moving between two of YOUR OWN deposit accounts (checking ↔ savings, Wells Fargo ↔ Bank of America).
+ * Payments to cards and loans are bills; Zelle to a person is spending unless the same Zelle shows up as a deposit on
+ * another of your deposit accounts.
+ */
 export function matchInternalTransfers(data: HomeData, windowDays = TRANSFER_WINDOW_DAYS): HomeData | null {
   const income = (data.income ?? []).slice();
   const txs = data.transactions.slice();
   const usedTx = new Set<string>();
+  const deposit = new Set(data.accounts.filter((a) => a.kind === "checking" || a.kind === "savings").map((a) => a.id));
   let changed = 0;
   for (let i = 0; i < income.length; i++) {
     const e = income[i];
     if (e.status || e.sourceId || e.internal) continue;
+    if (e.accountId && !deposit.has(e.accountId)) continue; // a credit on a card/loan is a payment, handled elsewhere
+    const eP2P = p2pParty(e.source);
     // Never pair against a merchant the user explicitly said is spending.
     let best = -1, bestGap = 99;
     for (let j = 0; j < txs.length; j++) {
       const t = txs[j];
       if (usedTx.has(t.id) || t.amount <= 0 || Math.abs(t.amount - e.amount) > 0.005) continue;
+      if (t.accountId === e.accountId) continue; // same account: not a move between accounts
+      if (t.accountId && !deposit.has(t.accountId)) continue; // paid from a card/loan: not a transfer
+      const tP2P = p2pParty(t.description);
+      if (!!tP2P !== !!eP2P || (tP2P && eP2P && tP2P.platform !== eP2P.platform)) continue; // Zelle out needs a Zelle in
       const gap = dayDiff(t.date, e.date);
       if (gap > windowDays || gap >= bestGap) continue;
       if (prefFor(data, txKey(data, t)).kind === "spend") continue;
@@ -350,6 +365,16 @@ export function matchInternalTransfers(data: HomeData, windowDays = TRANSFER_WIN
     changed++;
   }
   return changed ? { ...data, income, transactions: txs } : null;
+}
+
+/** Forget every automatic transfer pairing and redo it under the current rules (hand-set "It's a transfer" prefs are untouched). */
+export function rematchInternalTransfers(data: HomeData): HomeData {
+  const cleared: HomeData = {
+    ...data,
+    transactions: data.transactions.map((t) => (t.transfer ? { ...t, transfer: undefined } : t)),
+    income: (data.income ?? []).map((e) => (e.internal ? { ...e, internal: undefined, status: undefined } : e)),
+  };
+  return matchInternalTransfers(cleared) ?? cleared;
 }
 
 /**
