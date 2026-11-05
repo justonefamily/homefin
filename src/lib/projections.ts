@@ -78,6 +78,29 @@ export function plannedEveryday(data: HomeData, month: string): number {
   return Math.max(0, budgetTotal(data) - bills);
 }
 
+/**
+ * The "money month": when pay periods wrap the month line (paid the 30th → covers the 30th–14th), a month's money runs
+ * from the wrapping period's start in the previous month through the day before it starts again — Sep 30 → Oct 29 is
+ * October. Otherwise the calendar month. Everything that shows a month of in/out uses this so the halves add up.
+ */
+export function payMonthRange(data: HomeData, monthStart: Date): { from: Date; to: Date; label: string; shifted: boolean } {
+  const y = monthStart.getFullYear(), m = monthStart.getMonth();
+  const defs = periodDefs(data);
+  const wrap = defs.length >= 2 ? defs.find((d) => d.to < d.from) : undefined;
+  const name = monthStart.toLocaleString("en-US", { month: "long", year: "numeric" });
+  if (!wrap) return { from: new Date(y, m, 1), to: new Date(y, m + 1, 0), label: name, shifted: false };
+  const prevDim = new Date(y, m, 0).getDate();
+  const from = new Date(y, m - 1, Math.min(wrap.from, prevDim));
+  const to = new Date(y, m, Math.min(wrap.from - 1, new Date(y, m + 1, 0).getDate()));
+  const short = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return { from, to, label: `${name} · ${short(from)} – ${short(to)}`, shifted: true };
+}
+/** Pay periods in the order they fall inside a money month (the wrapping one first). */
+export function periodDefsInMonthOrder(data: HomeData) {
+  const defs = periodDefs(data);
+  return [...defs].sort((a, b) => Number(b.to < b.from) - Number(a.to < a.from));
+}
+
 /** Which pay period a calendar day (1–31) belongs to: "a" (first) or "b" (second). Single-period schedules are always "a". */
 export function periodOfDay(data: HomeData, day: number): Period {
   const defs = periodDefs(data);

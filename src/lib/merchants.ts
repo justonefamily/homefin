@@ -245,6 +245,17 @@ export function flowFor(data: HomeData, from: string, to: string): Flow {
     if (paysDown) { const l = (c.kind === "bill" ? bl : c.kind === "transfer" ? tr : c.kind === "reimbursable" ? rb : sp).get(c.key); if (l) l.paysDown = paysDown; }
     if (c.kind !== "transfer") bump(t.accountId, "out", t.amount);
   }
+  // Bills marked paid by hand with no bank transaction behind them (yet) — the mortgage paid from another account, say.
+  for (const p of data.payments) {
+    const day = p.paidAt.slice(0, 10);
+    if (day < from || day > to) continue;
+    const b = data.bills.find((x) => x.id === p.billId);
+    if (!b) continue;
+    if ([...bl.values()].some((l) => l.bill?.id === b.id)) continue; // the real transaction is already in the range
+    const key = b.merchant ?? `bill:${b.id}`;
+    group(bl, key, `${b.name} · marked paid`, { amount: p.amount, accountId: b.accountId, date: day, category: b.category }, b);
+    bump(b.accountId, "out", p.amount);
+  }
   const sum = (m: Map<string, FlowLine>) => [...m.values()].reduce((s, l) => s + l.amount, 0);
   const sortDesc = (m: Map<string, FlowLine>) => [...m.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
   // Bills due in range but not paid

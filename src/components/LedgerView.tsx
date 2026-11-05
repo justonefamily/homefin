@@ -10,7 +10,7 @@ import { runSync } from "@/lib/syncClient";
 import { CheckSquare, Square, X } from "lucide-react";
 import { ledgerEntries, ledgerKindLabel, ledgerTotals, type LedgerEntry } from "@/lib/ledger";
 import { ymd } from "@/lib/calendar";
-import { currentPeriodRange, shiftPeriod } from "@/lib/projections";
+import { currentPeriodRange, payMonthRange, shiftPeriod } from "@/lib/projections";
 import type { IncomeEvent } from "@/lib/types";
 
 type Span = "month" | "period" | "3m" | "12m" | "all" | "custom";
@@ -32,10 +32,10 @@ export function LedgerView({ today }: { today: Date }) {
 
   // The window: a month or pay period you can step through, a trailing span, everything, or your own dates.
   const range = useMemo(() => {
-    if (span === "month") { const m = addMonths(startOfMonth(today), offset); return { from: ymd(m), to: ymd(endOfMonth(m)), label: m.toLocaleString("en-US", { month: "long", year: "numeric" }) }; }
+    if (span === "month") { const r = payMonthRange(data, addMonths(startOfMonth(today), offset)); return { from: ymd(r.from), to: ymd(r.to), label: r.label }; }
     if (span === "period") { let r = currentPeriodRange(data, today); for (let i = 0; i < Math.abs(offset); i++) r = shiftPeriod(data, r, offset < 0 ? -1 : 1); return { from: ymd(r.from), to: ymd(r.to), label: r.label }; }
-    if (span === "3m") return { from: ymd(addMonths(today, -3)), to: ymd(today), label: "Last 3 months" };
-    if (span === "12m") return { from: ymd(addMonths(today, -12)), to: ymd(today), label: "Last 12 months" };
+    if (span === "3m") return { from: ymd(payMonthRange(data, addMonths(startOfMonth(today), -3)).from), to: ymd(today), label: "Last 3 months" };
+    if (span === "12m") return { from: ymd(payMonthRange(data, addMonths(startOfMonth(today), -12)).from), to: ymd(today), label: "Last 12 months" };
     if (span === "custom") return { from: custom.from, to: custom.to, label: `${custom.from} – ${custom.to}` };
     return { from: undefined, to: undefined, label: "All time" };
   }, [span, offset, custom, data, today]);

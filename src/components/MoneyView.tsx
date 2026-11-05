@@ -11,7 +11,7 @@ import { openFlags, removeFlag, resolveFlag, setFlagNote } from "@/lib/flags";
 import { Flag as FlagIcon, Check, Trash2 } from "lucide-react";
 import type { IncomeEvent } from "@/lib/types";
 import { ymd } from "@/lib/calendar";
-import { currentPeriodRange, periodDefLabel, periodDefs, periodOfDay, shiftPeriod } from "@/lib/projections";
+import { currentPeriodRange, payMonthRange, periodDefLabel, periodDefs, periodDefsInMonthOrder, periodOfDay, shiftPeriod } from "@/lib/projections";
 import type { HomeData, Transaction } from "@/lib/types";
 import { brandColorFor } from "@/lib/brands";
 
@@ -25,8 +25,8 @@ function rangeFor(data: HomeData, today: Date, kind: Range, offset: number): { f
     return { from, to, label: `${from.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${to.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` };
   }
   if (kind === "month") {
-    const m = addMonths(startOfMonth(today), offset);
-    return { from: m, to: endOfMonth(m), label: m.toLocaleDateString("en-US", { month: "long", year: "numeric" }) };
+    const r = payMonthRange(data, addMonths(startOfMonth(today), offset));
+    return { from: r.from, to: r.to, label: r.label };
   }
   // pay period: anchored to paydays (or month halves), may run into next month
   const r = shiftPeriod(data, currentPeriodRange(data, today), offset);
@@ -146,8 +146,10 @@ function MerchantsView({ today }: { today: Date }) {
   const [span, setSpan] = useState<"1m" | "3m" | "12m" | "all">("1m");
   const [filter, setFilter] = useState<"all" | "spend" | "bill" | "reimbursable" | "transfer" | "ignore">("all");
   const [q, setQ] = useState("");
-  const from = span === "all" ? undefined : span === "1m" ? ymd(startOfMonth(today)) : ymd(addMonths(today, span === "3m" ? -3 : -12));
-  const spanLabel = span === "1m" ? `${today.toLocaleString("en-US", { month: "long" })} so far` : span === "3m" ? "last 3 months" : span === "12m" ? "last 12 months" : "all time";
+  // Months are money months (see payMonthRange): this month = from the 30th before through today.
+  const thisMonth = payMonthRange(data, startOfMonth(today));
+  const from = span === "all" ? undefined : span === "1m" ? ymd(thisMonth.from) : ymd(payMonthRange(data, addMonths(startOfMonth(today), span === "3m" ? -3 : -12)).from);
+  const spanLabel = span === "1m" ? `${today.toLocaleString("en-US", { month: "long" })} so far${thisMonth.shifted ? ` (from ${thisMonth.from.toLocaleDateString("en-US", { month: "short", day: "numeric" })})` : ""}` : span === "3m" ? "last 3 months" : span === "12m" ? "last 12 months" : "all time";
   const all = useMemo(() => merchantSummaries(data, from), [data, from]);
   const similar = useMemo(() => similarMerchants(all, data.settings.notSamePlace ?? []), [all, data.settings.notSamePlace]);
   const notSame = (a: MerchantSummary, b: MerchantSummary) => update((h) => ({ ...h, settings: { ...h.settings, notSamePlace: [...new Set([...(h.settings.notSamePlace ?? []), pairKey(a.key, b.key)])] } }), `${a.name} and ${b.name} are different places`);
@@ -246,15 +248,15 @@ function EverydayView({ today }: { today: Date }) {
   const monthsBack = span === "1m" ? 0 : span === "3m" ? 3 : span === "6m" ? 6 : span === "12m" ? 12 : 0;
   // Which half of each month to look at: both, or just the first / second pay period (as set up in Settings).
   const [half, setHalf] = useState<"both" | "a" | "b">("both");
-  const defs = periodDefs(data);
+  const defs = periodDefsInMonthOrder(data); // first = the half that opens the money month (30th–14th), then 15th–29th
   const twoPeriods = defs.length >= 2;
+  const halfOf = (d: { from: number; to: number }) => (periodDefs(data)[0] === d ? "a" : "b") as "a" | "b";
   // "This month" is just this month so far (no averaging). Longer spans: previous N full months plus this month so far,
   // with this month counted as the fraction that has passed.
   const end = ymd(today);
-  const windowStart = span === "all" ? undefined : addMonths(startOfMonth(today), -monthsBack);
-  // Splitting by pay period: start the window at the period that contains the 1st, so a period that began late last month
-  // (e.g. the 30th) is counted whole rather than cut at the month line.
-  const from = windowStart ? ymd(half === "both" || !twoPeriods ? windowStart : currentPeriodRange(data, windowStart).from) : undefined;
+  // Money months: "this month" runs from the wrapping period's start (the 30th before) through today, so both halves add up.
+  const thisMonth = payMonthRange(data, startOfMonth(today));
+  const from = span === "all" ? undefined : ymd(payMonthRange(data, addMonths(startOfMonth(today), -monthsBack)).from);
   const span_ = span === "all" ? Math.max(1, (data.transactions.length ? differenceInCalendarDays(today, new Date(data.transactions.reduce((m, t) => (t.date < m ? t.date : m), end))) : 0) / 30.44) : monthsBack === 0 ? 1 : monthsBack + today.getDate() / getDaysInMonth(today);
   const dayOf = (t: Transaction) => Number(t.date.slice(8, 10));
   const keepA = (t: Transaction) => periodOfDay(data, dayOf(t)) === "a";
@@ -297,17 +299,18 @@ function EverydayView({ today }: { today: Date }) {
           <div className="flex-1 min-w-0">
             <div className="text-[11px] text-muted">By pay period · which half of the month the spending lands in</div>
             <div className="flex gap-4 mt-1 flex-wrap">
-              <button onClick={() => setHalf(half === "a" ? "both" : "a")} className={cx("text-left", half === "a" && "text-accent")}><div className="text-[15px] font-bold">{money(halves.a)}</div><div className="text-[11px] text-muted">{periodDefLabel(defs[0])}{span !== "1m" && span_ > 1 ? ` · ${money(Math.round(halves.a / span_))}/mo` : ""}</div></button>
-              <button onClick={() => setHalf(half === "b" ? "both" : "b")} className={cx("text-left", half === "b" && "text-accent")}><div className="text-[15px] font-bold">{money(halves.b)}</div><div className="text-[11px] text-muted">{periodDefLabel(defs[1])}{span !== "1m" && span_ > 1 ? ` · ${money(Math.round(halves.b / span_))}/mo` : ""}</div></button>
-              <div className="text-[11px] text-muted self-end pb-0.5">{halves.a + halves.b > 0 ? `${Math.round((Math.max(halves.a, halves.b) / (halves.a + halves.b)) * 100)}% lands in the ${halves.a >= halves.b ? "first" : "second"} half` : ""}</div>
+              {defs.map((d, i) => { const h = halfOf(d); const v = halves[h]; return (
+                <button key={i} onClick={() => setHalf(half === h ? "both" : h)} className={cx("text-left", half === h && "text-accent")}><div className="text-[15px] font-bold">{money(v)}</div><div className="text-[11px] text-muted">{periodDefLabel(d)}{span !== "1m" && span_ > 1 ? ` · ${money(Math.round(v / span_))}/mo` : ""}</div></button>
+              ); })}
+              <div className="text-[11px] text-muted self-end pb-0.5">{halves.a + halves.b > 0 ? `${Math.round((Math.max(halves.a, halves.b) / (halves.a + halves.b)) * 100)}% lands in the ${(halves.a >= halves.b ? "a" : "b") === halfOf(defs[0]) ? "first" : "second"} half` : ""}</div>
             </div>
           </div>
-          <div className="w-full sm:w-72"><Segmented size="sm" value={half} onChange={setHalf} options={[{ id: "both", label: "Both" }, { id: "a", label: periodDefLabel(defs[0]) }, { id: "b", label: periodDefLabel(defs[1]) }]} /></div>
+          <div className="w-full sm:w-72"><Segmented size="sm" value={half} onChange={setHalf} options={[{ id: "both", label: "Both" }, ...defs.map((d) => ({ id: halfOf(d), label: periodDefLabel(d) }))]} /></div>
         </Card>
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-        <Card className="p-3"><div className="text-[11px] text-muted">{monthsBack === 0 && span !== "all" ? "Spent so far this month" : "Actual, per month"}</div><div className="text-[17px] font-bold">{money(perMonth)}</div><div className="text-[11px] text-muted">{half !== "both" ? `${periodDefLabel(defs[half === "a" ? 0 : 1])} only · ` : ""}{span === "all" ? "all time" : monthsBack === 0 ? `${today.toLocaleString("en-US", { month: "long" })} 1 – ${today.getDate()}` : `last ${monthsBack} months + this month so far`}</div></Card>
+        <Card className="p-3"><div className="text-[11px] text-muted">{monthsBack === 0 && span !== "all" ? "Spent so far this month" : "Actual, per month"}</div><div className="text-[17px] font-bold">{money(perMonth)}</div><div className="text-[11px] text-muted">{half !== "both" ? `${periodDefLabel(defs[half === "a" ? 0 : 1])} only · ` : ""}{span === "all" ? "all time" : monthsBack === 0 ? `${thisMonth.from.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${today.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : `last ${monthsBack} months + this month so far`}</div></Card>
         <Card className="p-3"><div className="text-[11px] text-muted">In the plan</div><div className="text-[17px] font-bold">{money(estimate)}</div><div className={cx("text-[11px] font-semibold", estimate < perMonth ? "text-red" : "text-green")}>{monthsBack === 0 ? (estimate >= perMonth ? `${money(estimate - perMonth)} left this month` : `${money(perMonth - estimate)} over already`) : estimate < perMonth ? `${money(perMonth - estimate)}/mo under-planned` : estimate > perMonth ? `${money(estimate - perMonth)}/mo cushion` : "matches"}</div></Card>
         <Card className="p-3"><div className="text-[11px] text-muted">Places</div><div className="text-[17px] font-bold">{spend.length}</div><div className="text-[11px] text-muted">{groups.length} categor{groups.length === 1 ? "y" : "ies"}{occasional.length ? ` · ${occasional.length} one-off${occasional.length === 1 ? "" : "s"} set aside` : ""}</div></Card>
         <Card className="p-3 flex flex-col justify-between"><div className="text-[11px] text-muted">Make the plan match</div><Button onClick={setEstimate} disabled={perMonth === estimate || perMonth === 0 || monthsBack === 0} className="h-9 text-xs mt-1">{monthsBack === 0 ? "Pick 3+ months to set" : `Set everyday to ${money(perMonth)}/mo`}</Button></Card>
