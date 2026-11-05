@@ -4,7 +4,7 @@ import { Sparkles } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { DepositSheet } from "./ItemSheet";
 import { Button, Card, Eyebrow, Field, Modal, Stat, cx, inputCls, money, selectCls } from "./ui";
-import { detectIncome, expectedMonthlyIncome, groupDeposits, matchIncomeEvents, merchantKey, monthlyOf, receivedInMonth, suggestionToSource, unreviewedDeposits, type IncomeSuggestion } from "@/lib/detect";
+import { detectIncome, expectedMonthlyIncome, groupDeposits, incomeMonthOf, matchIncomeEvents, merchantKey, monthlyOf, receivedInMonth, suggestionToSource, unreviewedDeposits, type IncomeSuggestion } from "@/lib/detect";
 import { monthKey } from "@/lib/strategies";
 import type { IncomeEvent, IncomeSource } from "@/lib/types";
 import { uid } from "@/lib/storage/adapter";
@@ -44,10 +44,10 @@ export function IncomeView({ today }: { today: Date }) {
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-3 gap-2.5 md:max-w-xl">
         <Stat dark label="Expected / month" value={money(expected)} />
-        <Stat label={`Received (${today.toLocaleString("en-US", { month: "short" })})`} value={money(received)} tone={received >= expected ? "green" : undefined} />
+        <Stat label={`Received (${today.toLocaleString("en-US", { month: "short" })}${data.pay.incomeRollDay ? ` · from the ${data.pay.incomeRollDay}th before` : ""})`} value={money(received)} tone={received >= expected ? "green" : undefined} />
         <Stat label="Still expected" value={money(Math.max(0, expected - received))} />
       </div>
-      <div className="text-xs text-muted">Expected is your projection; received is what actually landed. The number in Settings is only used until you add a source here.</div>
+      <div className="text-xs text-muted">Expected is your projection; received is what actually landed.{data.pay.incomeRollDay ? ` A check on or after the ${data.pay.incomeRollDay}th counts toward the next month — so this month is the late check from last month plus the mid-month one.` : ""} The number in Settings is only used until you add a source here.</div>
 
       {suggestions.length > 0 && (
         <Card className="p-4 flex flex-col gap-3 border-accent-line bg-accent-bg/40">
@@ -69,7 +69,7 @@ export function IncomeView({ today }: { today: Date }) {
       <Card>
         {sources.length === 0 && <div className="p-4 text-sm text-muted">No income sources yet. Confirm one above, or add one manually.</div>}
         {sources.map((s) => {
-          const got = (data.income ?? []).filter((e) => e.sourceId === s.id && e.date.startsWith(month));
+          const got = (data.income ?? []).filter((e) => e.sourceId === s.id && incomeMonthOf(data, e.date) === month);
           const gotSum = got.reduce((a, e) => a + e.amount, 0);
           const expMonth = monthlyOf(s.expected, s.cadence);
           return (

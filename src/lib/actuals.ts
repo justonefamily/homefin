@@ -9,15 +9,7 @@ import { billKeyMap, classify } from "./merchants";
  */
 export interface DayActual { income: number; bills: number; spend: number; billNames: string[] }
 
-/** The month a deposit pays for: the calendar month, unless it landed on/after the roll day — then the next month. */
-export function incomeMonthOf(data: HomeData, date: string): string {
-  const roll = data.pay.incomeRollDay;
-  const month = date.slice(0, 7);
-  if (!roll || Number(date.slice(8, 10)) < roll) return month;
-  const [y, m] = month.split("-").map(Number);
-  const n = new Date(y, m, 1); // m is 1-based → next month
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
-}
+export { incomeMonthOf } from "./detect";
 
 export function actualsByDay(data: HomeData, monthKey: string): DayActual[] {
   const [y, m] = monthKey.split("-").map(Number);

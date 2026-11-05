@@ -285,8 +285,17 @@ export const suggestionToSource = (s: IncomeSuggestion, id: string, kind: Income
   ({ id, name: s.source, kind, merchant: s.key, expected: s.perPaycheck, cadence: s.cadence, payDays: s.payDays });
 
 /** Income received in a month: counted events (attached or explicitly counted). */
+/** The month a deposit pays for: on/after the roll day (Settings → Pay schedule) it belongs to the next month. */
+export const incomeMonthOf = (data: HomeData, date: string): string => {
+  const roll = data.pay.incomeRollDay;
+  const month = date.slice(0, 7);
+  if (!roll || Number(date.slice(8, 10)) < roll) return month;
+  const [y, m] = month.split("-").map(Number);
+  const n = new Date(y, m, 1);
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
+};
 export const receivedInMonth = (data: HomeData, month: string) =>
-  (data.income ?? []).filter((e) => e.date.startsWith(month) && (e.status === "counted" || e.sourceId)).reduce((s, e) => s + e.amount, 0);
+  (data.income ?? []).filter((e) => incomeMonthOf(data, e.date) === month && (e.status === "counted" || e.sourceId)).reduce((s, e) => s + e.amount, 0);
 
 /** Deposits nobody has decided on yet (not attached to a source, not counted, not ignored). */
 export const unreviewedDeposits = (data: HomeData) => (data.income ?? []).filter((e) => !e.sourceId && !e.status).sort((a, b) => b.date.localeCompare(a.date));
