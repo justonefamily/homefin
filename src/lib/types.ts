@@ -148,6 +148,8 @@ export interface Settings {
   dismissedSuggestions?: string[];
   /** Plaid account ids the user hid — sync skips them without disconnecting the bank. */
   hiddenAccounts?: string[];
+  /** Outcome of the last bank sync attempt, from any device — shown on Accounts and Home so a failure is never silent. */
+  lastSync?: { at: string; ok: boolean; message: string };
   /** Manager columns on the Budget page (who owns which categories). Empty = one plain list. */
   budgetManagers?: BudgetManager[];
   /** Set once every linked bank has been re-pulled from the start to collect loan/card credits (payment destinations). */

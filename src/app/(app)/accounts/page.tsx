@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Script from "next/script";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, AlertTriangle } from "lucide-react";
 import { useHome } from "@/store/useHome";
 import { Button, Card, Eyebrow, Field, Mark, Modal, Segmented, cx, inputCls, money, selectCls } from "@/components/ui";
 import { CreditView } from "@/components/CreditView";
@@ -17,6 +17,8 @@ const GROUPS: { title: string; kinds: AccountKind[] }[] = [
   { title: "Credit health", kinds: ["credit-score"] },
 ];
 
+/** More than a day and a half since this account last refreshed — worth a look. */
+const stale = (iso?: string) => !iso || Date.now() - new Date(iso).getTime() > 36 * 3600_000;
 const ago = (iso?: string) => {
   if (!iso) return "manual";
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -63,21 +65,27 @@ export default function AccountsPage() {
     update((h) => ({ ...h, accounts: h.accounts.filter((x) => x.id !== id), bills: h.bills.map((b) => (b.accountId === id ? { ...b, accountId: undefined } : b)) }), "removed account");
   };
 
+  const [syncFailed, setSyncFailed] = useState(false);
   const sync = useCallback(async () => {
-    setSyncing(true); setMsg(null);
+    setSyncing(true); setMsg(null); setSyncFailed(false);
+    const record = (ok: boolean, message: string) => update((h) => ({ ...h, settings: { ...h.settings, lastSync: { at: new Date().toISOString(), ok, message } } }), ok ? "synced" : "sync failed");
     try {
       const r = await fetch("/api/plaid/sync", { method: "POST" });
-      const j = await r.json();
+      // A timeout or gateway error comes back as HTML, not JSON — say so plainly instead of "Unexpected token".
+      const text = await r.text();
+      let j: { error?: string; accounts?: number; transactions?: number; autoPaid?: number; pending?: string[]; problems?: string[] };
+      try { j = JSON.parse(text); } catch { throw new Error(r.status === 504 || r.status === 408 ? "Sync timed out — the banks took too long to answer. Try again; it usually works the second time." : `Sync failed (${r.status}).`); }
       if (!r.ok) throw new Error(j.error ?? "sync failed");
       await load();
       const parts = [`Synced ${j.accounts} account${j.accounts === 1 ? "" : "s"}, ${j.transactions} new transaction${j.transactions === 1 ? "" : "s"}.`];
       if (j.autoPaid) parts.push(`Marked ${j.autoPaid} bill payment${j.autoPaid === 1 ? "" : "s"} from your transactions.`);
       if (j.pending?.length) parts.push(`Transactions for ${j.pending.join(", ")} are still loading at Plaid — tap Sync again in a minute.`);
-      if (j.problems?.length) parts.push(j.problems.join(" · "));
+      if (j.problems?.length) { parts.push(j.problems.join(" · ")); setSyncFailed(true); }
       setMsg(parts.join(" "));
-    } catch (e) { setMsg((e as Error).message); }
+      record(!j.problems?.length, parts.join(" "));
+    } catch (e) { const m = (e as Error).message; setMsg(m); setSyncFailed(true); record(false, m); }
     setSyncing(false);
-  }, [load]);
+  }, [load, update]);
 
   /** Open Plaid Link. With `receivedRedirectUri`, this resumes an OAuth bank (Bank of America, Chase…) after it sent the user back to us. */
   const openLink = useCallback((token: string, receivedRedirectUri?: string) => {
@@ -146,7 +154,8 @@ export default function AccountsPage() {
             : <><b>Bank linking needs cloud storage.</b> Sign in with Supabase to connect banks through Plaid; on this device you can add accounts manually or import a CSV.</>}
         </div>
       </Card>
-      {msg && <Card className="p-3 text-xs text-ink">{msg}</Card>}
+      {msg && <Card className={cx("p-3 text-xs flex items-start gap-2", syncFailed ? "border-red/50 bg-red/5 text-red" : "text-ink")}>{syncFailed && <AlertTriangle size={14} className="shrink-0 mt-0.5" />}<div><b>{syncFailed ? "Sync failed. " : ""}</b>{msg}</div></Card>}
+      {!msg && data.settings.lastSync && !data.settings.lastSync.ok && <Card className="p-3 text-xs flex items-start gap-2 border-red/50 bg-red/5 text-red"><AlertTriangle size={14} className="shrink-0 mt-0.5" /><div><b>Last sync failed</b> ({new Date(data.settings.lastSync.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}): {data.settings.lastSync.message}</div></Card>}
       {plaidEnabled && (
         <Card className="p-4 flex flex-col gap-3">
           <div className="flex flex-col md:flex-row md:items-end gap-3">
@@ -233,7 +242,7 @@ function AccountRow({ a, onClick }: { a: Account; onClick: () => void }) {
             <div className="text-sm font-semibold truncate">{sameName ? a.name : <>{a.institution} <span className="text-muted font-normal">·</span> {a.name}</>}</div>
             <div className="text-[11px] text-muted">{KIND_LABEL[a.kind]}</div>
           </div>
-          <div className={cx("text-[11px] font-semibold shrink-0 flex items-center gap-1 pt-0.5", a.source === "plaid" ? "text-green" : "text-muted")}><i className={cx("w-1.5 h-1.5 rounded-full inline-block", a.source === "plaid" ? "bg-green" : "bg-field")} />{a.source === "plaid" ? ago(a.lastSyncedAt) : a.source}</div>
+          <div className={cx("text-[11px] font-semibold shrink-0 flex items-center gap-1 pt-0.5", a.source !== "plaid" ? "text-muted" : stale(a.lastSyncedAt) ? "text-amber" : "text-green")}><i className={cx("w-1.5 h-1.5 rounded-full inline-block", a.source !== "plaid" ? "bg-field" : stale(a.lastSyncedAt) ? "bg-amber" : "bg-green")} />{a.source === "plaid" ? ago(a.lastSyncedAt) : a.source}</div>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {callouts.map((c) => (

@@ -13,6 +13,9 @@ import { requireHome } from "../_shared";
  * PRODUCT_NOT_READY for transactions for up to a minute — accounts still save, and the
  * response says transactions are still loading so the UI can offer a retry.
  */
+// Six banks × accounts + liabilities + transaction pages takes longer than the 10 s default; allow a full minute.
+export const maxDuration = 60;
+
 export async function POST() {
   const ctx = await requireHome();
   if ("error" in ctx) return ctx.error;
