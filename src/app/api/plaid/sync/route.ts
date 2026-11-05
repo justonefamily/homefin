@@ -109,8 +109,10 @@ export async function POST(req: Request) {
     if (body.phase === "transactions") {
       // Re-pull from the start when history is needed (credits backfill) or the client asks for a restart.
       const needsHistory = body.restart || !home.settings.creditsBackfilledAt;
-      const historyStarted = home.settings.historyStarted ?? {};
-      let cursor: string | undefined = needsHistory && !historyStarted[it.id] ? undefined : it.cursor ?? undefined;
+      let historyStarted = home.settings.historyStarted ?? {};
+      // A restart forgets where this bank was and pulls everything again (ids are deduped, so nothing doubles).
+      if (body.restart && historyStarted[it.id]) { historyStarted = { ...historyStarted, [it.id]: false }; }
+      let cursor: string | undefined = (needsHistory || body.restart) && !historyStarted[it.id] ? undefined : it.cursor ?? undefined;
       const started = Date.now();
       let pages = 0, added = 0, hasMore = true, attempts = 0;
       try {

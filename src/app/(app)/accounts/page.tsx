@@ -68,11 +68,11 @@ export default function AccountsPage() {
 
   const [syncFailed, setSyncFailed] = useState(false);
   const [progress, setProgress] = useState<SyncProgress | null>(null);
-  const sync = useCallback(async () => {
+  const sync = useCallback(async (restart = false) => {
     setSyncing(true); setMsg(null); setSyncFailed(false); setProgress(null);
     const record = (ok: boolean, message: string) => update((h) => ({ ...h, settings: { ...h.settings, lastSync: { at: new Date().toISOString(), ok, message } } }), ok ? "synced" : "sync failed");
     try {
-      const j = await runSync(setProgress);
+      const j = await runSync(setProgress, { restart });
       await load();
       const parts = [`Synced ${j.accounts} account${j.accounts === 1 ? "" : "s"}, ${j.transactions} new transaction${j.transactions === 1 ? "" : "s"}.`];
       if (j.autoPaid) parts.push(`Marked ${j.autoPaid} bill payment${j.autoPaid === 1 ? "" : "s"} from your transactions.`);
@@ -137,7 +137,7 @@ export default function AccountsPage() {
         <h1 className="text-2xl font-bold tracking-tight">{tab === "credit" ? "Credit" : "Accounts"}</h1>
         <div className="flex gap-2 items-center">
           <div className="w-44"><Segmented size="sm" value={tab} onChange={setTab} options={[{ id: "accounts", label: "Accounts" }, { id: "credit", label: "Credit" }]} /></div>
-          {tab === "accounts" && plaidEnabled && live > 0 && <Button variant="secondary" onClick={sync} disabled={syncing}><RefreshCw size={14} className={cx("inline mr-1", syncing && "animate-spin")} /> Sync</Button>}
+          {tab === "accounts" && plaidEnabled && live > 0 && <Button variant="secondary" onClick={() => sync(false)} disabled={syncing}><RefreshCw size={14} className={cx("inline mr-1", syncing && "animate-spin")} /> Sync</Button>}
           {tab === "accounts" && <Button onClick={() => setEditing("new")} className="rounded-full">+ Add</Button>}
         </div>
       </div>
@@ -159,6 +159,7 @@ export default function AccountsPage() {
           {progress.message && <div className="text-[11px] text-muted">{progress.message}</div>}
         </Card>
       )}
+      {plaidEnabled && live > 0 && !syncing && <div className="text-[11px] text-muted -mt-2">Missing something the bank definitely has? <button onClick={() => { if (confirm("Pull every transaction from every bank again? Nothing doubles — it just takes a few minutes.")) sync(true); }} className="text-accent font-semibold">Full re-sync</button> re-reads all history.</div>}
       {msg && <Card className={cx("p-3 text-xs flex items-start gap-2", syncFailed ? "border-red/50 bg-red/5 text-red" : "text-ink")}>{syncFailed && <AlertTriangle size={14} className="shrink-0 mt-0.5" />}<div><b>{syncFailed ? "Sync failed. " : ""}</b>{msg}</div></Card>}
       {!msg && data.settings.lastSync && !data.settings.lastSync.ok && <Card className="p-3 text-xs flex items-start gap-2 border-red/50 bg-red/5 text-red"><AlertTriangle size={14} className="shrink-0 mt-0.5" /><div><b>Last sync failed</b> ({new Date(data.settings.lastSync.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}): {data.settings.lastSync.message}</div></Card>}
       {plaidEnabled && (

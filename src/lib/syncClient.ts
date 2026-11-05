@@ -20,7 +20,7 @@ const post = async (body: unknown) => {
 /** Progress inside a bank: accounts are the first fifth; each transactions page closes a third of what's left (so it climbs but never hits 100 until the bank says done). */
 const txProgress = (pages: number) => 0.2 + 0.78 * (1 - Math.pow(2 / 3, pages));
 
-export async function runSync(onProgress: (p: SyncProgress) => void): Promise<SyncResult> {
+export async function runSync(onProgress: (p: SyncProgress) => void, opts: { restart?: boolean } = {}): Promise<SyncResult> {
   const result: SyncResult = { accounts: 0, transactions: 0, autoPaid: 0, pending: [], problems: [], failed: false };
   const emit = (phase: SyncProgress["phase"], banks: BankProgress[], message?: string) => {
     const perBank = banks.length ? banks.reduce((s, b) => s + b.progress, 0) / banks.length : 1;
@@ -47,7 +47,7 @@ export async function runSync(onProgress: (p: SyncProgress) => void): Promise<Sy
     let hasMore = true, pages = 0, tx = 0, failed = false;
     while (hasMore) {
       try {
-        const t = await post({ itemId: bank.id, phase: "transactions" });
+        const t = await post({ itemId: bank.id, phase: "transactions", restart: opts.restart && pages === 0 });
         pages += (t.pages as number) ?? 0; tx += (t.transactions as number) ?? 0;
         hasMore = !!t.hasMore;
         if (t.pending) { result.pending.push(bank.name); setBank(bank.id, { state: "pending", progress: 1, pages, transactions: tx, message: "still loading at the bank — sync again in a minute" }); failed = true; break; }
