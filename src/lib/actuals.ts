@@ -9,7 +9,8 @@ import { billKeyMap, classify } from "./merchants";
  */
 export interface DayActual { income: number; bills: number; spend: number; billNames: string[] }
 
-export { incomeMonthOf } from "./detect";
+import { incomeMonthOf } from "./detect";
+export { incomeMonthOf };
 
 export function actualsByDay(data: HomeData, monthKey: string): DayActual[] {
   const [y, m] = monthKey.split("-").map(Number);
