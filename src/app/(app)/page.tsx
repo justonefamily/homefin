@@ -113,7 +113,7 @@ export default function HomePage() {
           {(() => {
             const ls = data.settings.lastSync;
             const newest = Math.max(0, ...data.accounts.filter((a) => a.source === "plaid" && a.lastSyncedAt).map((a) => new Date(a.lastSyncedAt!).getTime()));
-            const staleDays = newest ? Math.floor((Date.now() - newest) / 86_400_000) : 0;
+            const staleDays = newest ? Math.floor((today.getTime() - newest) / 86_400_000) : 0;
             if (ls && !ls.ok) return <Link href="/accounts"><Card className="p-3 flex items-start gap-2 border-red/50 bg-red/5 text-red text-[12px]"><AlertTriangle size={14} className="shrink-0 mt-0.5" /><div><b>Bank sync failed</b> {new Date(ls.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} — {ls.message} <span className="font-semibold">Open Accounts ›</span></div></Card></Link>;
             if (staleDays >= 2) return <Link href="/accounts"><Card className="p-3 flex items-start gap-2 border-amber-line bg-amber-bg text-amber text-[12px]"><AlertTriangle size={14} className="shrink-0 mt-0.5" /><div><b>Banks haven&apos;t refreshed in {staleDays} days.</b> Numbers here may be behind. <span className="font-semibold">Sync on Accounts ›</span></div></Card></Link>;
             return null;
