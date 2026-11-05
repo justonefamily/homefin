@@ -6,6 +6,7 @@ import { useHome } from "@/store/useHome";
 import { Card, Segmented, cx, inputCls, money, selectCls } from "./ui";
 import { ItemSheet, DepositSheet } from "./ItemSheet";
 import { merchantSummaries, moveTransaction, setMerchantPref, setPaymentDestination } from "@/lib/merchants";
+import { runSync } from "@/lib/syncClient";
 import { CheckSquare, Square, X } from "lucide-react";
 import { ledgerEntries, ledgerKindLabel, ledgerTotals, type LedgerEntry } from "@/lib/ledger";
 import { ymd } from "@/lib/calendar";
@@ -81,7 +82,7 @@ export function LedgerView({ today }: { today: Date }) {
   const load = useHome((s) => s.load);
   const sync = async () => {
     setSyncing(true); setSyncMsg(null);
-    try { const r = await fetch("/api/plaid/sync", { method: "POST" }); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "sync failed"); await load(); setSyncMsg(j.pending?.length ? "Still loading at the bank — try again in a minute." : "Done."); }
+    try { const j = await runSync((p) => setSyncMsg(`${Math.round(p.overall * 100)}%…`)); await load(); setSyncMsg(j.problems.length ? j.problems.join(" · ") : j.pending.length ? "Still loading at the bank — try again in a minute." : "Done."); }
     catch (e) { setSyncMsg((e as Error).message); }
     finally { setSyncing(false); }
   };
